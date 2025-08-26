@@ -10,4 +10,10 @@ Broom is not a token. It is the ledger and blockchain infrastructure that will s
 
 The ledger is backed by Ed25519 Elliptic curve key signiatures for all cryptography. Broom uses JSON messages over TCP to transmit information between nodes. The starting verification algorithm is Proof of Work using a nunce formula. Proof of Stake will be implemented at a later date.
 
+## Node messaging protocol
 
+Nodes communicate on port 4188 and messages are passed via a bytestream of encoded json. Each message starts with a unique byte delimeter 276
+
+protocol looks like:
+
+`276` `8 bytes length value` `data (however long the length value says)`
