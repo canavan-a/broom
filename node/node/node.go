@@ -1,6 +1,7 @@
 package node
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -189,4 +190,19 @@ func (n *Node) processIncomingMessage(rawMsg []byte) {
 
 func (n *Node) broadcastMessage(rawMsg []byte) {
 
+}
+
+func signMsg(msg []byte) []byte {
+	base := make([]byte, 0, len(START_DELIMETER)+8+len(msg))
+
+	base = append(base, START_DELIMETER...)
+
+	lengthBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(lengthBytes, uint64(len(msg)))
+	base = append(base, lengthBytes...)
+
+	// Append the message
+	base = append(base, msg...)
+
+	return base
 }
