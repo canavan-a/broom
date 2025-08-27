@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"testing"
+
+	nodecrypto "github.com/canavan-a/broom/node/crypto"
 )
 
 func TestNewWallet(t *testing.T) {
@@ -30,14 +32,14 @@ func TestSignatures(t *testing.T) {
 
 	data := []byte("hello world!!!")
 
-	signature := Sign(data, client.PrivateKey)
+	signature := nodecrypto.Sign(data, client.PrivateKey)
 
-	if !Verify(data, signature, *client.PublicKey) {
+	if !nodecrypto.Verify(data, signature, *client.PublicKey) {
 		t.Error("could not validate signature")
 	}
 
 	tamperedData := []byte("evil hello world")
-	if Verify(tamperedData, signature, *client.PublicKey) {
+	if nodecrypto.Verify(tamperedData, signature, *client.PublicKey) {
 		t.Error("varified invalid signature")
 	}
 

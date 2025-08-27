@@ -20,4 +20,6 @@ protocol looks like:
 
 ## Cryptography
 
-The asymetric keys type used are Ed25519 Elliptic curve keys. The wallet address is equivalent to the public key. The public key gets transmitted as the hex output of the X, Y values concatted together. because if the EC algorithm the length is fine for wallet addresses.
+The asymetric keys type used are Ed25519 Elliptic curve keys. The wallet address is equivalent to the public key. The public key gets transmitted as the hex output of the X, Y values concatted together. Because of the EC algorithm the length is fine for wallet addresses and the lengths are consistently 32 bits.
+
+The signiature for signed data is transmitted as string value of the two value signiatures. This is R.S where the two components of hash are separated between a period. These values are parsed and used to validate the authenticity of the transaction data.

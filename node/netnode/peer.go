@@ -1,4 +1,4 @@
-package node
+package netnode
 
 import (
 	"bytes"

@@ -1,4 +1,4 @@
-package node
+package netnode
 
 import (
 	"fmt"
@@ -35,6 +35,10 @@ func TestTcpMsg(t *testing.T) {
 		}
 	}
 
+}
+
+func TestSample(t *testing.T) {
+	fmt.Println("hhello")
 }
 
 func startTcp() {
