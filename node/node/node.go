@@ -16,6 +16,8 @@ const RETRY_TIME = 3 // in seconds
 
 const PEER_CONNECTION_RETRIES = 5
 
+const MAX_PEER_CONNECTIONS = 200
+
 const PROTOCOL_MAX_SIZE = 30_000_000
 
 var START_DELIMETER = []byte{0x01, 0x14}
@@ -23,8 +25,8 @@ var START_DELIMETER = []byte{0x01, 0x14}
 type MessageType string
 
 const (
-	Ping    MessageType = "Ping"
-	PeerAdd MessageType = "PeerAdd"
+	Ping          MessageType = "Ping"
+	PeerBroadcast MessageType = "PeerBroadcast"
 )
 
 type Node struct {
@@ -48,11 +50,17 @@ func ActivateNode(seedNodes ...string) *Node {
 	node.Seed()
 
 	// listen to incoming connections
-	node.ListenIncomingConnections()
+	node.StartListenIncomingConnections()
 
-	node.ListenIncomingMessages()
+	node.StartListenIncomingMessages()
+
+	node.Schedule(node.BroadcastPeers, time.Minute*5)
 
 	return node
+}
+
+func (n *Node) BroadcastPeers() {
+	// prepare
 }
 
 func (n *Node) Seed() {
@@ -91,6 +99,7 @@ func (n *Node) DialPeer(address string) (*Peer, error) {
 	}
 
 	peer := &Peer{
+		start:   time.Now(),
 		address: address,
 		conn:    conn,
 	}
@@ -99,22 +108,23 @@ func (n *Node) DialPeer(address string) (*Peer, error) {
 
 }
 
-func (n *Node) ListenIncomingConnections() {
-
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", TCP_PORT)) // listen on port 12345
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer ln.Close()
-
-	for {
-		conn, err := ln.Accept()
+func (n *Node) StartListenIncomingConnections() {
+	go func() {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%s", TCP_PORT)) // listen on port 12345
 		if err != nil {
-			fmt.Println("could not accept tcp conn")
-			continue
+			log.Fatal(err)
 		}
-		go n.handleConn(conn)
-	}
+		defer ln.Close()
+
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				fmt.Println("could not accept tcp conn")
+				continue
+			}
+			go n.handleConn(conn)
+		}
+	}()
 
 }
 
@@ -123,10 +133,31 @@ func (n *Node) handleConn(conn net.Conn) {
 	if err != nil {
 		return
 	}
+
+	defer conn.Close()
+
+	n.mutex.Lock()
+	// max check
+	peerLength := len(n.peers)
+
+	// check duplicates
+	_, found := n.peers[host]
+
+	n.mutex.Unlock()
+
+	if found {
+		return
+	}
+
+	if peerLength >= MAX_PEER_CONNECTIONS {
+		return
+	}
+
 	retries := 0
 	for {
 		n.mutex.Lock()
 		n.peers[host] = &Peer{
+			start:   time.Now(),
 			address: host,
 			conn:    conn,
 		}
@@ -159,10 +190,10 @@ func (n *Node) addPeerFromHost(host string) {
 type Message struct {
 	Action MessageType `json:"action"`
 
-	HostName string `json:"hostname,omitempty"`
+	HostNames []string `json:"hostname,omitempty"`
 }
 
-func (n *Node) ListenIncomingMessages() {
+func (n *Node) StartListenIncomingMessages() {
 	go func() {
 		for {
 			msg := <-n.msgChannel
@@ -171,25 +202,25 @@ func (n *Node) ListenIncomingMessages() {
 	}()
 }
 
-func (n *Node) processIncomingMessage(rawMsg []byte) {
-	msg := Message{}
-	err := json.Unmarshal(rawMsg, &msg)
-	if err != nil {
-		fmt.Println("invalid json format")
-		return
+func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
+	signedMsg := signMsg(rawMsg)
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+	for _, peer := range n.peers {
+		_, err := peer.conn.Write(signedMsg)
+		if err != nil {
+			// do nothing
+		}
 	}
-
-	switch msg.Action {
-	case PeerAdd:
-		n.addPeerFromHost(msg.HostName)
-	case Ping:
-		fmt.Println("pinged")
-	}
-
 }
 
-func (n *Node) broadcastMessage(rawMsg []byte) {
-
+func (n *Node) Schedule(task func(), period time.Duration) {
+	go func() {
+		for {
+			task()
+			time.Sleep(period)
+		}
+	}()
 }
 
 func signMsg(msg []byte) []byte {
@@ -205,4 +236,27 @@ func signMsg(msg []byte) []byte {
 	base = append(base, msg...)
 
 	return base
+}
+
+func (n *Node) processIncomingMessage(rawMsg []byte) {
+	msg := Message{}
+	err := json.Unmarshal(rawMsg, &msg)
+	if err != nil {
+		fmt.Println("invalid json format")
+		return
+	}
+
+	switch msg.Action {
+	case PeerBroadcast:
+		for _, host := range msg.HostNames {
+			n.addPeerFromHost(host)
+		}
+	case Ping:
+		fmt.Println("pinged")
+	}
+
+}
+
+func TestSomething() {
+
 }

@@ -5,9 +5,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"time"
 )
 
 type Peer struct {
+	start   time.Time
 	address string
 	conn    net.Conn
 }
