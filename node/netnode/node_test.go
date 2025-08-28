@@ -59,7 +59,7 @@ func startTcp() {
 		//broadcast msg every 2 seconds
 		msg := "hello world"
 
-		data := signMsg([]byte(msg))
+		data := formatMsg([]byte(msg))
 
 		_, err := conn.Write(data)
 		if err != nil {
