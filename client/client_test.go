@@ -11,35 +11,58 @@ func TestNewWallet(t *testing.T) {
 
 	client := NewClient()
 
-	privateKey, address, err := client.NewWallet()
+	address, privateKey, err := client.NewWallet()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 
-	fmt.Println("address: ", address)
+	fmt.Printf("addresss: %s\n", address)
 
-	fmt.Println("privateKey: ", privateKey)
+	fmt.Printf("pkey: %s", privateKey)
 
 }
 
 func TestSignatures(t *testing.T) {
-	client := NewClient()
+	// client := NewClient()
 
-	_, _, err := client.NewWallet()
+	// address, pk, err := client.NewWallet()
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+
+	address := "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEo9QDtE5lWkdpLXlIsLKtDsrmXuoGTwNexouisLP558XzqsDNNiT3VLFtXIxWrTHu7hni9LfnAQyRo3+7CyzXrQ=="
+	// pub, err := nodecrypto.ParsePublicKey(address)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	pk := "MHcCAQEEIFMgAbTXECVfKIjf+kM2dpYNmuE8GRyOeKCBGjYXNOTooAoGCCqGSM49AwEHoUQDQgAEo9QDtE5lWkdpLXlIsLKtDsrmXuoGTwNexouisLP558XzqsDNNiT3VLFtXIxWrTHu7hni9LfnAQyRo3+7CyzXrQ=="
+
+	pub, err := nodecrypto.ParsePublicKey(address)
 	if err != nil {
-		t.Error(err)
+
+		t.Fatal(err.Error())
 	}
 
-	data := []byte("hello world!!!")
+	PrivateKey, err := nodecrypto.ParsePrivateKey(pk)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 
-	signature := nodecrypto.Sign(data, client.PrivateKey)
+	if PrivateKey == nil {
+		t.Fatal(err.Error())
+	}
 
-	if !nodecrypto.Verify(data, signature, *client.PublicKey) {
+	data := []byte("hello worsld!!!")
+
+	signature := nodecrypto.Sign(data, PrivateKey)
+
+	if !nodecrypto.Verify(data, signature, pub) {
 		t.Error("could not validate signature")
 	}
 
 	tamperedData := []byte("evil hello world")
-	if nodecrypto.Verify(tamperedData, signature, *client.PublicKey) {
+	if nodecrypto.Verify(tamperedData, signature, pub) {
 		t.Error("varified invalid signature")
 	}
 

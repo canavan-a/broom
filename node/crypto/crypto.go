@@ -2,36 +2,53 @@ package crypto
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"math/big"
 	"strings"
 )
 
-func GenerateAddress(publicKey ecdsa.PublicKey) string {
-	address := publicKey.X.Text(16) + publicKey.Y.Text(16)
-	return address
+// Address = public key as base64
+func GenerateAddress(publicKey ecdsa.PublicKey) (string, error) {
+	b, err := x509.MarshalPKIXPublicKey(&publicKey)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
 }
 
-func ParsePublicKey(address string) *ecdsa.PublicKey {
-
-	mid := len(address) / 2
-	X := address[:mid]
-	Y := address[mid:]
-
-	pubX := new(big.Int)
-	pubX.SetString(X, 16)
-
-	pubY := new(big.Int)
-	pubY.SetString(Y, 16)
-
-	return &ecdsa.PublicKey{
-		Curve: elliptic.P256(),
-		X:     pubX,
-		Y:     pubY,
+func ParsePublicKey(address string) (*ecdsa.PublicKey, error) {
+	b, err := base64.StdEncoding.DecodeString(address)
+	if err != nil {
+		return nil, err
 	}
+
+	key, err := x509.ParsePKIXPublicKey(b)
+	if err != nil {
+		return nil, err
+	}
+
+	pub, ok := key.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an ECDSA public key")
+	}
+	return pub, nil
+}
+
+func GeneratePrivateKeyText(privateKey *ecdsa.PrivateKey) string {
+	b, _ := x509.MarshalECPrivateKey(privateKey)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+func ParsePrivateKey(privateKeyText string) (*ecdsa.PrivateKey, error) {
+	b, err := base64.StdEncoding.DecodeString(privateKeyText)
+	if err != nil {
+		return nil, err
+	}
+	return x509.ParseECPrivateKey(b)
 }
 
 func Sign(data []byte, privateKey *ecdsa.PrivateKey) (signi string) {
@@ -47,7 +64,7 @@ func Sign(data []byte, privateKey *ecdsa.PrivateKey) (signi string) {
 	return
 }
 
-func Verify(data []byte, signi string, publicKey ecdsa.PublicKey) bool {
+func Verify(data []byte, signi string, publicKey *ecdsa.PublicKey) bool {
 	parts := strings.Split(signi, ".")
 	if len(parts) != 2 {
 		return false
@@ -55,9 +72,13 @@ func Verify(data []byte, signi string, publicKey ecdsa.PublicKey) bool {
 
 	r := new(big.Int)
 	s := new(big.Int)
-	r.SetString(parts[0], 16)
-	s.SetString(parts[1], 16)
+	if _, ok := r.SetString(parts[0], 16); !ok {
+		return false
+	}
+	if _, ok := s.SetString(parts[1], 16); !ok {
+		return false
+	}
 
 	hash := sha256.Sum256(data)
-	return ecdsa.Verify(&publicKey, hash[:], r, s)
+	return ecdsa.Verify(publicKey, hash[:], r, s)
 }

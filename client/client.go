@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"fmt"
 	"math/big"
 
 	nodecrypto "github.com/canavan-a/broom/node/crypto"
@@ -24,7 +25,13 @@ func NewClient(nodes ...string) *Client {
 
 func (c *Client) Init(address, privateKey string) {
 
-	c.PublicKey = nodecrypto.ParsePublicKey(address)
+	pk, err := nodecrypto.ParsePublicKey(address)
+	if err != nil {
+		fmt.Println("could not parse pub key")
+		panic(err)
+	}
+
+	c.PublicKey = pk
 
 	privD := new(big.Int)
 	privD.SetString(privateKey, 16)
@@ -42,9 +49,12 @@ func (c *Client) NewWallet() (address string, privateKey string, err error) {
 		return "", "", err
 	}
 
-	address = nodecrypto.GenerateAddress(priv.PublicKey)
+	address, err = nodecrypto.GenerateAddress(priv.PublicKey)
+	if err != nil {
+		return "", "", err
+	}
 
-	privateKey = priv.D.Text(16)
+	privateKey = nodecrypto.GeneratePrivateKeyText(priv)
 
 	c.Init(address, privateKey)
 
