@@ -10,16 +10,24 @@ import (
 type Transaction struct {
 	Sig string `json:"sig"`
 
-	Nonce  int64  `json:"nonce"`
-	To     string `json:"to"`
-	From   string `json:"from"`
-	Amount int64  `json:"amount"`
+	Coinbase bool   `json:"coinbase"`
+	Note     string `json:"note"`
+	Nonce    int64  `json:"nonce"`
+	To       string `json:"to"`
+	From     string `json:"from"`
+	Amount   int64  `json:"amount"`
 }
 
 func (t *Transaction) Serialize() []byte {
 
 	buf := new(bytes.Buffer)
 
+	if t.Coinbase {
+		buf.WriteByte(1)
+	} else {
+		buf.WriteByte(0)
+	}
+	buf.WriteString(t.Note)
 	binary.Write(buf, binary.BigEndian, t.Nonce)
 	buf.WriteString(t.To)
 	buf.WriteString(t.From)
@@ -50,4 +58,9 @@ func (t *Transaction) ValidateSig() (bool, error) {
 	}
 
 	return crypto.Verify(t.Serialize(), t.Sig, pub), nil
+}
+
+func (t *Transaction) ValidateSize() bool {
+
+	return true
 }

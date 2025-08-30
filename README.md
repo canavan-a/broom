@@ -30,20 +30,20 @@ The transaction follows the following format, this gives the node enough informa
 
 ```golang
 type Transaction struct {
-  Sig string `json:"sig"`
+	Sig string `json:"sig"`
 
-  Nonce int64 `json:"nonce"`
-
-  To   string `json:"to"`
-  From string `json:"from"`
-
-  Amount int64 `json:"amount"`
+	Coinbase bool   `json:"coinbase"`
+	Note     string `json:"note"`
+	Nonce    int64  `json:"nonce"`
+	To       string `json:"to"`
+	From     string `json:"from"`
+	Amount   int64  `json:"amount"`
 }
 ```
 
 The order of the data is very important for consistent signature. We use the order as below with no spaces:
 
-`nonce` `to` `from` `amount`
+`coinbase` `note` `nonce` `to` `from` `amount`
 
 This data is signed by the private key and added to the signature value.
 
