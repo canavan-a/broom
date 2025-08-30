@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
@@ -81,4 +82,16 @@ func Verify(data []byte, signi string, publicKey *ecdsa.PublicKey) bool {
 
 	hash := sha256.Sum256(data)
 	return ecdsa.Verify(publicKey, hash[:], r, s)
+}
+
+func Hash(data []byte) string {
+	hash := sha256.Sum256(data)
+
+	return hex.EncodeToString(hash[:])
+}
+
+func ValidateHash(data []byte, hash string) bool {
+	hashedData := Hash(data)
+
+	return hash == hashedData
 }

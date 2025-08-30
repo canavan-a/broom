@@ -51,6 +51,6 @@ This data is signed by the private key and added to the signature value.
 
 To serialize we use the order as below with no spaces:
 
-`height` `nonce` `previousHash` `transactions`
+`timestamp` `height` `nonce` `previousHash` `transactions`
 
 The transactions are serialized after the rest of the data, the order is the string alphabetical order.
