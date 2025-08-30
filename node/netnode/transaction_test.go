@@ -20,19 +20,16 @@ func TestTransaction(t *testing.T) {
 		Amount: 500,
 	}
 
-	serialized := txn.Serialize()
+	txn.Sign(privateKey)
 
-	sig := Sign(privateKey, serialized)
-
-	pubKey, err := crypto.ParsePublicKey(address)
+	valid, err := txn.ValidateSig()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !crypto.Verify(serialized, sig, pubKey) {
-		t.Error("signature not valid")
+	if !valid {
+		t.Fatal(err)
 	}
-
 }
 
 func Sign(privateKey string, data []byte) string {

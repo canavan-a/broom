@@ -30,7 +30,7 @@ const (
 	Ping            MessageType = "Ping"
 	PeerBroadcast   MessageType = "PeerBroadcast"
 	TransactionSend MessageType = "TransactionSend"
-	Block           MessageType = "Block"
+	BlockMsg        MessageType = "BlockMsg"
 	BlockSolution   MessageType = "BlockSolution"
 )
 

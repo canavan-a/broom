@@ -1,6 +1,6 @@
 # Broom
 
-A distributed ledger written in Go based loosely on the Satoshi Nakamotot bitcoin whitepaper. Credit also given to Gary Gensler's course on MIT openCourseWare: Blockchain and Money.
+A distributed ledger written in Go based loosely on the Satoshi Nakamotot bitcoin whitepaper. Credit also given to Gary Gensler's course on MIT openCourseWare: Blockchain and Money. `Zero` dependencies outside of the Go standard library.
 
 ## Background
 
@@ -37,8 +37,20 @@ type Transaction struct {
   To   string `json:"to"`
   From string `json:"from"`
 
-  Amount float `json:"amount"`
+  Amount int64 `json:"amount"`
 }
 ```
 
-The order of the data is very important for consist 
+The order of the data is very important for consistent signature. We use the order as below with no spaces:
+
+`nonce` `to` `from` `amount`
+
+This data is signed by the private key and added to the signature value.
+
+## Blocks
+
+To serialize we use the order as below with no spaces:
+
+`height` `nonce` `previousHash` `transactions`
+
+The transactions are serialized after the rest of the data, the order is the string alphabetical order.
