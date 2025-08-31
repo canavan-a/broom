@@ -16,7 +16,7 @@ func TestNewWallet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("addresss: %s\n", address)
+	fmt.Printf("address: %s\n", address)
 
 	fmt.Printf("pkey: %s", privateKey)
 

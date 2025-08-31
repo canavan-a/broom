@@ -3,18 +3,22 @@ package netnode
 import (
 	"bytes"
 	"maps"
+	"math/big"
 	"math/rand"
 
 	"time"
 
 	"encoding/binary"
+	"encoding/hex"
 	"slices"
 	"strings"
 
 	"github.com/canavan-a/broom/node/crypto"
 )
 
+const COINBASE = "coinbase"
 const MAX_BLOCK_SIZE = 1000
+const STARTING_PAYOUT = 10_000
 
 type MemPool struct {
 	ValidTransactions TransactionPool
@@ -31,6 +35,32 @@ type Block struct {
 }
 
 type TransactionPool map[string]Transaction
+
+func NewBlock(myAddress string, note string, PreviousBlockHash string, height int64, currentReward int64) *Block {
+
+	// make coinbase Txn
+	coinbaseTxn := &Transaction{
+		Sig: "", // no sender
+
+		Coinbase: true,
+		Note:     note,
+		Nonce:    0, // no nonce to increment (could use the block height)
+		To:       myAddress,
+		From:     "", // from coinbase
+		Amount:   currentReward,
+	}
+
+	txns := make(map[string]Transaction)
+
+	txns[COINBASE] = *coinbaseTxn
+
+	return &Block{
+		PreviousBlockHash: PreviousBlockHash,
+		Transactions:      txns,
+		Height:            height,
+	}
+
+}
 
 func (b *Block) Serialize() []byte {
 
@@ -104,7 +134,7 @@ func (b Block) StartSolutionWorker(target string, solutionChan chan Block, done 
 			return
 		default:
 			b.RotateMiningValues()
-			if b.Hash < target {
+			if CompareHash(b.Hash, target) {
 				select {
 				case solutionChan <- b:
 				case <-done:
@@ -113,6 +143,17 @@ func (b Block) StartSolutionWorker(target string, solutionChan chan Block, done 
 			}
 		}
 	}
+}
+
+func CompareHash(hash, target string) bool {
+	hb, _ := hex.DecodeString(hash)
+	tb, _ := hex.DecodeString(target)
+
+	hi := new(big.Int).SetBytes(hb)
+	ti := new(big.Int).SetBytes(tb)
+
+	return hi.Cmp(ti) == -1
+
 }
 
 func (b Block) DeepCopy() Block {
@@ -134,6 +175,6 @@ func (b *Block) MineWithWorkers(target string, workers int, solutionChan chan Bl
 }
 
 type BlockChain struct {
-	Prev    Block
-	Current Block
+	Prev    *Block
+	Current *Block
 }

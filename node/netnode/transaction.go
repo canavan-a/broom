@@ -61,6 +61,5 @@ func (t *Transaction) ValidateSig() (bool, error) {
 }
 
 func (t *Transaction) ValidateSize() bool {
-
-	return true
+	return len(t.Note) < 1000
 }
