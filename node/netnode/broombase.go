@@ -27,8 +27,9 @@ type PendingBalance struct {
 }
 
 type Ledger struct {
-	mut         sync.RWMutex
+	mut         *sync.RWMutex
 	BlockHeight int64            `json:"blockHeight"`
+	BlockHash   string           `json:"blockHash"`
 	Balances    map[string]int64 `json:"balances"` // track receiver balances
 	Nonces      map[string]int64 `json:"nonces"`   // track sender nonce values of transactions
 	Pending     []PendingBalance `json:"pending"`
@@ -53,7 +54,7 @@ func InitBroombaseWithDir(dir string) *Broombase {
 	bb := &Broombase{
 		mut: sync.RWMutex{},
 		ledger: &Ledger{
-			mut:         sync.RWMutex{},
+			mut:         &sync.RWMutex{},
 			BlockHeight: 0,
 			Balances:    make(map[string]int64),
 			Nonces:      make(map[string]int64),
@@ -80,6 +81,7 @@ func InitBroombaseWithDir(dir string) *Broombase {
 		txns[GENESIS] = GENESIS_TXN
 
 		var GENESIS_BLOCK = Block{
+			Height:       GENESIS_BLOCK_HEIGHT,
 			Timestamp:    time.Date(2001, time.November, 11, 0, 0, 0, 0, time.UTC).Unix(),
 			Transactions: txns,
 		}
@@ -89,9 +91,9 @@ func InitBroombaseWithDir(dir string) *Broombase {
 
 	}
 
-	highestBlock := bb.getHighestBlock()
+	highestBlock, highestBlockHash := bb.getHighestBlock()
 
-	err := bb.SyncLedger(highestBlock)
+	err := bb.SyncLedger(highestBlock, highestBlockHash)
 	if err != nil {
 		panic(err)
 	}
@@ -100,8 +102,8 @@ func InitBroombaseWithDir(dir string) *Broombase {
 
 }
 
-func (bb *Broombase) getHighestBlock() int64 {
-	return 0
+func (bb *Broombase) getHighestBlock() (height int64, hash string) {
+	return 0, ""
 }
 
 func (bb *Broombase) AddBlock(block *Block) error {
@@ -115,23 +117,29 @@ func (bb *Broombase) AddBlock(block *Block) error {
 		return errors.New("block error: block already exists")
 	}
 
-	previousBlock, found := bb.GetBlock(block.PreviousBlockHash, block.Height-1)
-	if !found {
-		return errors.New("block error: previous block does not exist")
-	}
+	if block.Height != GENESIS_BLOCK_HEIGHT {
+		previousBlock, found := bb.GetBlock(block.PreviousBlockHash, block.Height-1)
+		if !found {
+			return errors.New("block error: previous block does not exist")
+		}
 
-	// validate timestamp
-	if block.GetTimestampTime().Compare(previousBlock.GetTimestampTime()) == -1 {
-		return errors.New("block error: time is before previous block")
-	}
-	if block.GetTimestampTime().Compare(time.Now()) == 1 {
-		return errors.New("block error: block time is in the future")
-	}
+		// validate timestamp
+		if block.GetTimestampTime().Compare(previousBlock.GetTimestampTime()) == -1 {
+			return errors.New("block error: time is before previous block")
+		}
+		if block.GetTimestampTime().Compare(time.Now()) == 1 {
+			return errors.New("block error: block time is in the future")
+		}
 
-	// TODO: validate transactions,
-	// double spend,
-	// coinbase amount,
-	// coinbase validity (one per block)
+		// TODO: validate transactions,
+		// double spend,
+		// coinbase amount,
+		// coinbase validity (one per block)
+	} else {
+		if block.Hash != GENESIS_HASH {
+			return errors.New("invalid genesis block hash, attemp made to attack genesis block")
+		}
+	}
 
 	err := bb.StoreBlock(*block)
 	if err != nil {
@@ -141,7 +149,7 @@ func (bb *Broombase) AddBlock(block *Block) error {
 	// TODO: Update ledger
 
 	if bb.ledger.BlockHeight+1 != block.Height {
-		err := bb.SyncLedger(block.Height - 1)
+		err := bb.SyncLedger(block.Height, block.Hash)
 		if err != nil {
 			return err
 		}
@@ -184,7 +192,145 @@ func (bb *Broombase) StoreBlock(block Block) error {
 
 }
 
-func (bb *Broombase) SyncLedger(blockHeight int64) error {
+// TDO: implement snapshots where we can jump to pick like n blocks ago
+func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
+
+	//clear ledger (can't sync with old data)
+	bb.ledger.Clear()
+
+	// keep as much data not in memory as possible
+	type heightHash struct {
+		height int64
+		hash   string
+	}
+
+	fingerPrint := make([]heightHash, blockHeight+1)
+
+	// trace backwards through chain until genesis
+	for blockHeight >= 0 {
+
+		block, found := bb.GetBlock(blockHash, blockHeight)
+		if !found {
+			return errors.New("SyncLedger: could not find block")
+		}
+		fingerPrint[blockHeight] = heightHash{
+			height: block.Height,
+			hash:   block.Hash,
+		}
+
+		blockHeight = block.Height - 1
+		blockHash = block.PreviousBlockHash
+	}
+
+	for _, finger := range fingerPrint {
+		block, found := bb.GetBlock(finger.hash, finger.height)
+		if !found {
+			return errors.New("SyncLedger: could not find block")
+		}
+
+		bb.ledger.Accumulate(block)
+	}
 
 	return nil
+}
+
+func (l *Ledger) ValidateBlock(block Block) error {
+
+	l.mut.RLock()
+	defer l.mut.RUnlock()
+
+	// vlaidate height
+	if block.Height-l.BlockHeight != 1 {
+		return errors.New("ValidateBlock: cannot validate block on incorrect height increment")
+	}
+
+	// vlaidate hash
+	if block.PreviousBlockHash != l.BlockHash {
+		return errors.New("ValidateBlock: cannot validate block on incorrect previous block")
+	}
+
+	accountTransactions := make(map[string][]Transaction)
+
+	coinbaseTxns := 0
+	for _, txn := range block.Transactions {
+
+		// check coinbase txns
+		if txn.Coinbase {
+			coinbaseTxns++
+		}
+		if coinbaseTxns > 1 {
+			// coinbase txns can be 0
+			return errors.New("ValidateBlock: too many coinbase txns")
+		}
+
+		if txn.Coinbase {
+			err := l.ValidateCoinbaseTxn(txn, block.Height)
+			if err != nil {
+				return err
+			}
+		} else {
+			valid, err := txn.ValidateSig()
+			if !valid || err != nil {
+				return errors.New("ValidateBlock: could not validate transaction")
+			}
+
+			accountTransactions[txn.From] = append(accountTransactions[txn.From], txn)
+
+		}
+
+	}
+
+	for from, txnGroup := range accountTransactions {
+		// check nonces and sum
+
+		// check sum of txns is valid
+		var sendAmount int64
+		for _, txn := range txnGroup {
+			sendAmount += txn.Amount
+		}
+
+		if l.Balances[from]-sendAmount < 0 {
+			return errors.New("invalid ")
+		}
+
+		// check nonces
+
+	}
+
+	return nil
+
+}
+
+// Add halving rule, or gambling rules
+func (l *Ledger) ValidateCoinbaseTxn(coinbaseTxn Transaction, currentBlock int64) error {
+	if coinbaseTxn.Amount != STARTING_PAYOUT {
+		return errors.New("invalid coinbase txn")
+	}
+	return nil
+}
+
+// need to remove vlaidity checking, assumes we have a valid block
+func (l *Ledger) Accumulate(b Block) {
+	l.mut.Lock()
+	defer l.mut.Unlock()
+
+	for _, txn := range b.Transactions {
+		if txn.Coinbase {
+			// add txns values in
+		} else {
+			// add coinbase txns to pending
+		}
+	}
+
+	// find all pending txns that have vested and settle them
+
+}
+
+func (l *Ledger) Clear() {
+	l.mut.Lock()
+	defer l.mut.Unlock()
+	l.BlockHeight = -1
+	l.Balances = make(map[string]int64)
+	l.Nonces = make(map[string]int64)
+	l.Pending = l.Pending[:0]
 }
