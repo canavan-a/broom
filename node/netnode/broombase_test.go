@@ -19,3 +19,61 @@ func TestGenerateGenesisHash(t *testing.T) {
 
 	fmt.Println(GENESIS_BLOCK.Hash)
 }
+
+func TestValidateNonce(t *testing.T) {
+
+	txns := []Transaction{
+		{
+			Nonce: 8,
+		},
+		{
+			Nonce: 9,
+		},
+		{
+			Nonce: 10,
+		},
+		{
+			Nonce: 11,
+		},
+	}
+
+	currentNonce, err := ValidateNonce(txns, 7)
+	if err != nil {
+		t.Error(err)
+		t.Fail()
+	}
+
+	if currentNonce != 11 {
+		t.Fail()
+	}
+
+}
+
+func TestValidateNonceFail(t *testing.T) {
+
+	txns := []Transaction{
+		{
+			Nonce: 8,
+		},
+		{
+			Nonce: 9,
+		},
+		{
+			Nonce: 10,
+		},
+		{
+			Nonce: 12,
+		},
+	}
+
+	currentNonce, err := ValidateNonce(txns, 7)
+	if err == nil {
+		t.Error(err)
+		t.Fail()
+	}
+
+	if currentNonce != 0 {
+		t.Fail()
+	}
+
+}
