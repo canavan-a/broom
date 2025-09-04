@@ -56,3 +56,15 @@ To serialize we use the order as below with no spaces:
 `timestamp` `height` `nonce` `previousHash` `transactions`
 
 The transactions are serialized after the rest of the data, the order is the string alphabetical order.
+
+## Broombase
+
+The Broombase is a database containing a series of files with raw bytes that marshall/unmarshall into json. Each file represents a block and contains all of the transactions for the block. The exposed fucntions are wrapped in a RWmutex to structure concurrent operations. Forked transactions can also be stored in the broombase. The highest block function resolves forks automatically. A strategy to resolve which is highest is implemented in code.
+
+Each file in the Broombase is labelled in the following format:
+
+`{height}_{hash}.broom`
+
+## Ledger
+
+The ledger is an in memory balance summary for each account. This is settled by stacking each block from source, validating and calculating final balances and highest nonces. Snapshots of the ledger will eventually be saved to improve performance. These will be stored similarly to the Broombase.

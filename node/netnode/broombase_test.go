@@ -2,6 +2,7 @@ package netnode
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -76,4 +77,18 @@ func TestValidateNonceFail(t *testing.T) {
 		t.Fail()
 	}
 
+}
+
+func TestGetHighestBlock(t *testing.T) {
+	bb := &Broombase{
+		dir: "broombase",
+		mut: sync.RWMutex{},
+	}
+
+	height, hash, err := bb.getHighestBlock()
+	if err != nil {
+		t.Fail()
+	}
+
+	fmt.Println(height, hash)
 }

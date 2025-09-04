@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,11 @@ type PendingBalance struct {
 	UnlockLevel int64  `json:"unlockLevel"`
 }
 
+type BlockTime struct {
+	Height int64     `json:"height"`
+	Time   time.Time `json:"time"`
+}
+
 type Ledger struct {
 	mut                 *sync.RWMutex
 	MiningThresholdHash string           `json:"miningThreshold"`
@@ -35,6 +41,7 @@ type Ledger struct {
 	BlockHash           string           `json:"blockHash"`
 	Balances            map[string]int64 `json:"balances"` // track receiver balances
 	Nonces              map[string]int64 `json:"nonces"`   // track sender nonce values of transactions
+	BlockTime           []BlockTime      `json:"blockTime"`
 	Pending             []PendingBalance `json:"pending"`
 }
 
@@ -62,6 +69,7 @@ func InitBroombaseWithDir(dir string) *Broombase {
 			BlockHeight:         0,
 			Balances:            make(map[string]int64),
 			Nonces:              make(map[string]int64),
+			BlockTime:           make([]BlockTime, 0),
 			Pending:             make([]PendingBalance, 0),
 		},
 	}
@@ -95,9 +103,12 @@ func InitBroombaseWithDir(dir string) *Broombase {
 
 	}
 
-	highestBlock, highestBlockHash := bb.getHighestBlock()
+	highestBlock, highestBlockHash, err := bb.getHighestBlock()
+	if err != nil {
+		panic(err)
+	}
 
-	err := bb.SyncLedger(highestBlock, highestBlockHash)
+	err = bb.SyncLedger(highestBlock, highestBlockHash)
 	if err != nil {
 		panic(err)
 	}
@@ -106,9 +117,60 @@ func InitBroombaseWithDir(dir string) *Broombase {
 
 }
 
-func (bb *Broombase) getHighestBlock() (height int64, hash string) {
-	// TODO!!!!!!
-	return 0, ""
+// this inadvertently resolves forks locally
+func (bb *Broombase) getHighestBlock() (height int64, hash string, err error) {
+	bb.mut.RLock()
+	defer bb.mut.RUnlock()
+
+	contents, err := os.ReadDir(bb.dir)
+	if err != nil {
+		return
+	}
+
+	type HeightEntry struct {
+		height int64
+		hash   string
+	}
+
+	var formattedContents []HeightEntry
+
+	for _, entry := range contents {
+		splitEntry := strings.Split(entry.Name(), "_")
+
+		h, err := strconv.Atoi(splitEntry[0])
+		if err != nil {
+			return 0, "", err
+		}
+		hashValue := strings.Split(splitEntry[1], ".broom")
+
+		formattedContents = append(formattedContents, HeightEntry{
+			height: int64(h),
+			hash:   hashValue[0],
+		})
+
+	}
+
+	slices.SortFunc(formattedContents, func(a HeightEntry, b HeightEntry) int {
+		return int(b.height) - int(a.height)
+	})
+
+	var tiedEntries []HeightEntry
+
+	highestHeight := formattedContents[0].height
+
+	for _, entry := range formattedContents {
+		if entry.height == highestHeight {
+			tiedEntries = append(tiedEntries, entry)
+		} else {
+			break
+		}
+	}
+
+	slices.SortFunc(tiedEntries, func(a, b HeightEntry) int {
+		return strings.Compare(a.hash, b.hash)
+	})
+
+	return tiedEntries[0].height, tiedEntries[0].hash, nil
 }
 
 func (bb *Broombase) AddBlock(block *Block) error {
@@ -119,7 +181,7 @@ func (bb *Broombase) AddBlock(block *Block) error {
 
 	_, found := bb.GetBlock(block.Hash, block.Height)
 	if found {
-		return errors.New("block error: block already exists")
+		return errors.New("block error: exact block already exists")
 	}
 
 	if block.Height != GENESIS_BLOCK_HEIGHT {
@@ -138,10 +200,6 @@ func (bb *Broombase) AddBlock(block *Block) error {
 			return errors.New("block error: block time is in the future")
 		}
 
-		// TODO: validate transactions,
-		// double spend,
-		// coinbase amount,
-		// coinbase validity (one per block)
 	} else {
 		if block.Hash != GENESIS_HASH {
 			return errors.New("invalid genesis block hash, attemp made to attack genesis block")
@@ -152,8 +210,6 @@ func (bb *Broombase) AddBlock(block *Block) error {
 	if err != nil {
 		return err
 	}
-
-	// TODO: Update ledger
 
 	if bb.ledger.BlockHeight+1 != block.Height {
 		err := bb.SyncLedger(block.Height, block.Hash)
@@ -206,12 +262,13 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 	bb.ledger.Clear()
 
 	// keep as much data not in memory as possible
-	type heightHash struct {
+	type heightHashTime struct {
 		height int64
 		hash   string
+		time   time.Time
 	}
 
-	fingerPrint := make([]heightHash, blockHeight+1)
+	fingerPrint := make([]heightHashTime, blockHeight+1)
 
 	// trace backwards through chain until genesis
 	for blockHeight >= 0 {
@@ -220,9 +277,10 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 		if !found {
 			return errors.New("SyncLedger: could not find block")
 		}
-		fingerPrint[blockHeight] = heightHash{
+		fingerPrint[blockHeight] = heightHashTime{
 			height: block.Height,
 			hash:   block.Hash,
+			time:   block.GetTimestampTime(),
 		}
 
 		blockHeight = block.Height - 1
@@ -246,6 +304,7 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 }
 
 // block must validate against current ledger
+// TODO: Validate Mining difficulty
 func (l *Ledger) ValidateBlock(block Block) error {
 
 	l.mut.RLock()
@@ -362,6 +421,12 @@ func (l *Ledger) Accumulate(b Block) {
 	// increment ledger
 	l.BlockHeight = b.Height
 	l.BlockHash = b.Hash
+
+	l.BlockTime = append(l.BlockTime, BlockTime{
+		Height: b.Height,
+		Time:   b.GetTimestampTime(),
+	})
+
 	l.MiningThresholdHash = l.CalculateNewMiningThreshold()
 
 	accountTransactions := make(map[string][]Transaction)
@@ -420,4 +485,5 @@ func (l *Ledger) Clear() {
 	l.Balances = make(map[string]int64)
 	l.Nonces = make(map[string]int64)
 	l.Pending = l.Pending[:0]
+	l.BlockTime = make([]BlockTime, 0)
 }
