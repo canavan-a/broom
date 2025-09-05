@@ -69,4 +69,12 @@ Each file in the Broombase is labelled in the following format:
 
 ## Ledger
 
-The ledger is an in memory balance summary for each account. This is settled by stacking each block from source, validating and calculating final balances and highest nonces. Snapshots of the ledger will eventually be saved to improve performance. These will be stored similarly to the Broombase.
+The ledger is an in memory balance summary for each account. This is settled by stacking each block from source, validating and calculating final balances and highest nonces. Snapshots of the ledger are saved. These are stored similarly to broombase. The ledger is stored in the file format:
+
+`{height}_{hash}.broomledger`
+
+Ledger snapshots are needed to resolve forks. The node needs the ability to validate blocks on a whim. Usually block validation is for current blocks. In the case of a fork, block validation will have to happen on all levels, this way arbitrary blocks can be added. The only condition to this is, we MUST have the previous block. Logic will be added to reconcile missing blocks in the event of a large fork.
+
+## Fork Tracking
+
+The flow is as follows, we receive a block. If this block solves the current puzzle then we add it, updating the ledger. If it does not, we need to locate the previous ledger snapshot. We validate the block against this snapshot, accumulate the ledger on the validated block, and then save the accumulated ledger to the file to continue the fork.

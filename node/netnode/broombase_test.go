@@ -112,7 +112,7 @@ func TestGetHighestBlock(t *testing.T) {
 
 func TestMinePoW(t *testing.T) {
 
-	bb := InitBroombaseWithDir("broombase_test")
+	bb := InitBroombaseWithDir("broombase_test", "ledger_test")
 
 	if bb.ledger.Balances[GENESIS_TXN.To] != STARTING_PAYOUT {
 
@@ -133,7 +133,7 @@ func TestMinePoW(t *testing.T) {
 		return
 	}
 
-	easyMiningTarget := "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	easyMiningTarget := DEFAULT_MINING_THRESHOLD
 
 	myAddress := txn.From
 
@@ -208,3 +208,17 @@ func TestSignTransaction(t *testing.T) {
 	}
 	fmt.Println(txn.Sig)
 }
+
+// FORK NOTES
+
+// => mining blocks
+//   => new block comes in (no height condition)
+//   	=> get a ledger form the file system (previous block previous height)
+//         => validate block against this ledger
+//				=> accumulate this ledger and save the new ledger to disk
+//
+// 		=> put block in storage
+//
+// How do we validate the block? without syncing?
+
+//

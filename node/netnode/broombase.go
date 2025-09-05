@@ -14,13 +14,16 @@ import (
 
 const GENESIS = "genesis"
 const BROOMBASE_DEFAULT_DIR = "broombase"
+const LEDGER_DEFAULT_DIR = "ledger"
+
 const GENESIS_BLOCK_HEIGHT = 0
-const DEFAULT_MINING_THRESHOLD = "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+const DEFAULT_MINING_THRESHOLD = "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 type Broombase struct {
-	mut    sync.RWMutex
-	dir    string
-	ledger *Ledger
+	mut       sync.RWMutex
+	dir       string
+	ledgerDir string
+	ledger    *Ledger
 }
 
 type PendingBalance struct {
@@ -35,7 +38,7 @@ type BlockTime struct {
 }
 
 type Ledger struct {
-	mut                 *sync.RWMutex
+	mut                 *sync.RWMutex    `json:"-"`
 	MiningThresholdHash string           `json:"miningThreshold"`
 	BlockHeight         int64            `json:"blockHeight"`
 	BlockHash           string           `json:"blockHash"`
@@ -56,10 +59,10 @@ var GENESIS_TXN = Transaction{
 
 // dir can be empty string
 func NewBroombase() *Broombase {
-	return InitBroombaseWithDir("")
+	return InitBroombaseWithDir("", "")
 }
 
-func InitBroombaseWithDir(dir string) *Broombase {
+func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 
 	bb := &Broombase{
 		mut: sync.RWMutex{},
@@ -79,11 +82,21 @@ func InitBroombaseWithDir(dir string) *Broombase {
 		dir = BROOMBASE_DEFAULT_DIR
 	}
 
+	ledgerDir = strings.ToLower(ledgerDir)
+	if ledgerDir == "" {
+		ledgerDir = LEDGER_DEFAULT_DIR
+	}
+
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		_ = os.MkdirAll(dir, 0755) // create if missing
 	}
 
+	if _, err := os.Stat(ledgerDir); os.IsNotExist(err) {
+		_ = os.MkdirAll(ledgerDir, 0755) // create if missing
+	}
+
 	bb.dir = dir
+	bb.ledgerDir = ledgerDir
 
 	// see if we have genesis block
 	_, found := bb.GetBlock(GENESIS_HASH, GENESIS_BLOCK_HEIGHT)
@@ -122,7 +135,7 @@ func InitBroombaseWithDir(dir string) *Broombase {
 
 }
 
-// this inadvertently resolves forks locally
+// reconciles forks, does not TRACK them
 func (bb *Broombase) getHighestBlock() (height int64, hash string, err error) {
 	bb.mut.RLock()
 	defer bb.mut.RUnlock()
@@ -263,6 +276,9 @@ func (bb *Broombase) StoreBlock(block Block) error {
 // TDO: implement snapshots where we can jump to pick like n blocks ago
 func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 
+	startBlockHeight := blockHeight
+	startBlockHash := blockHash
+
 	//clear ledger (can't sync with old data)
 	bb.ledger.Clear()
 
@@ -305,7 +321,74 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 		bb.ledger.Accumulate(block)
 	}
 
+	err := bb.StoreLedger(startBlockHash, startBlockHeight)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (bb *Broombase) StoreLedger(hash string, height int64) error {
+	bb.ledger.mut.Lock()
+	defer bb.ledger.mut.Unlock()
+
+	_, found := bb.GetLedgerAt(hash, height)
+	if found {
+		// we already have the ledger
+		return nil
+	}
+
+	data, err := json.Marshal(bb.ledger)
+	if err != nil {
+		return err
+	}
+
+	path := fmt.Sprintf("%s/%d_%s.broomledger", bb.ledgerDir, height, hash)
+	return os.WriteFile(path, data, 0644)
+}
+
+func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
+	bb.ledger.mut.Lock()
+	defer bb.ledger.mut.Unlock()
+
+	_, found := bb.GetLedgerAt(ledger.BlockHash, ledger.BlockHeight)
+	if found {
+		// we already have the ledger
+		return nil
+	}
+
+	data, err := json.Marshal(ledger)
+	if err != nil {
+		return err
+	}
+
+	path := fmt.Sprintf("%s/%d_%s.broomledger", bb.ledgerDir, ledger.BlockHeight, ledger.BlockHash)
+	return os.WriteFile(path, data, 0644)
+}
+
+func (bb *Broombase) GetLedgerAt(hash string, height int64) (*Ledger, bool) {
+
+	bb.ledger.mut.RLock()
+	defer bb.ledger.mut.RUnlock()
+
+	path := fmt.Sprintf("%s/%d_%s.broom", bb.dir, height, hash)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// file not found or read error
+		return nil, false
+	}
+
+	var ledger Ledger
+
+	err = json.Unmarshal(data, &ledger)
+	if err != nil {
+		return nil, false
+	}
+
+	ledger.mut = &sync.RWMutex{}
+
+	return &ledger, true
 }
 
 // block must validate against current ledger
@@ -496,4 +579,41 @@ func (l *Ledger) Clear() {
 	l.Nonces = make(map[string]int64)
 	l.Pending = l.Pending[:0]
 	l.BlockTime = make([]BlockTime, 0)
+}
+
+// Pass in a previously validated block, use l.ValidateBlock()
+// CurrentLedger
+func (l *Ledger) SyncNextBlock(validatedBlock Block) {
+	// one check to ensure the hashes match
+	l.Accumulate(validatedBlock)
+
+}
+
+// not ledger safe,
+// TODO: add logic to add on really old block > 30 or so old; prevents attacks
+func (bb *Broombase) ReceiveBlock(block Block) error {
+	// check if it solves current puzzle
+	if bb.ledger.BlockHeight+1 == block.Height && bb.ledger.BlockHash == block.PreviousBlockHash {
+		// this is the next block
+		return bb.AddBlock(&block)
+	} else {
+		// this block is not the correct puzzle target, we must still reconcile for forks
+		ledger, found := bb.GetLedgerAt(block.Hash, block.Height)
+		if !found {
+			return errors.New("Block has no associated ledger, we do not have previous")
+		}
+
+		err := ledger.ValidateBlock(block)
+		if err != nil {
+			fmt.Println(err)
+			return errors.New("could not validate block of prev value ledger")
+		}
+		ledger.SyncNextBlock(block)
+		err = bb.StoreGivenLedger(ledger)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
