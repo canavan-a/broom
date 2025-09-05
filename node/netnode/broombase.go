@@ -45,7 +45,7 @@ type Ledger struct {
 	Pending             []PendingBalance `json:"pending"`
 }
 
-var GENESIS_HASH = "b6723616b2a8fe417b2c3c47ca0fada3e433148a061da2cd6c15513630cfc3ad"
+var GENESIS_HASH = "d019918738cc138a3c693b48ce98304e4adfd96dc70cbe9bca0c027f81c55b6c"
 
 var GENESIS_TXN = Transaction{
 	Coinbase: false, // skip vesting schedule
@@ -88,7 +88,7 @@ func InitBroombaseWithDir(dir string) *Broombase {
 	// see if we have genesis block
 	_, found := bb.GetBlock(GENESIS_HASH, GENESIS_BLOCK_HEIGHT)
 	if !found {
-
+		fmt.Println("GENESIS BLOCK NOT FOUND")
 		txns := make(map[string]Transaction)
 		txns[GENESIS] = GENESIS_TXN
 
@@ -99,7 +99,12 @@ func InitBroombaseWithDir(dir string) *Broombase {
 		}
 
 		GENESIS_BLOCK.SignHash()
-		bb.AddBlock(&GENESIS_BLOCK)
+		fmt.Println(GENESIS_BLOCK.Hash)
+
+		err := bb.AddBlock(&GENESIS_BLOCK)
+		if err != nil {
+			panic(err)
+		}
 
 	}
 
@@ -211,8 +216,8 @@ func (bb *Broombase) AddBlock(block *Block) error {
 		return err
 	}
 
-	if bb.ledger.BlockHeight+1 != block.Height {
-		err := bb.SyncLedger(block.Height, block.Hash)
+	if bb.ledger.BlockHeight < block.Height {
+		err = bb.SyncLedger(block.Height, block.Hash)
 		if err != nil {
 			return err
 		}
@@ -384,6 +389,7 @@ func (l *Ledger) ValidateBlock(block Block) error {
 
 }
 
+// first txn nonce must be 1
 func ValidateNonce(txns []Transaction, lastNonce int64) (curentNonce int64, err error) {
 	var nonces []int64
 
@@ -476,6 +482,10 @@ func (l *Ledger) Accumulate(b Block) {
 
 func (l *Ledger) CalculateNewMiningThreshold() string {
 	return DEFAULT_MINING_THRESHOLD
+}
+
+func (l *Ledger) CalculateCurrentReward() int {
+	return STARTING_PAYOUT
 }
 
 func (l *Ledger) Clear() {

@@ -2,6 +2,7 @@ package netnode
 
 import (
 	"bytes"
+	"fmt"
 	"maps"
 	"math/big"
 	"math/rand"
@@ -20,10 +21,6 @@ const COINBASE = "coinbase"
 const MAX_BLOCK_SIZE = 1000
 const STARTING_PAYOUT = 10_000
 const COINBASE_VESTING_BLOCK_NUMBER = 30 // coinbase txns don't go out until a fork is hopefully resolved, these txn amounts are not spendable for this number of blocks
-
-type MemPool struct {
-	ValidTransactions TransactionPool
-}
 
 type Block struct {
 	Hash string `json:"hash"`
@@ -135,6 +132,7 @@ func (b Block) StartSolutionWorker(target string, solutionChan chan Block, done 
 			return
 		default:
 			b.RotateMiningValues()
+			fmt.Println(b.Hash)
 			if CompareHash(b.Hash, target) {
 				select {
 				case solutionChan <- b:
@@ -173,9 +171,4 @@ func (b *Block) MineWithWorkers(target string, workers int, solutionChan chan Bl
 			go bCopy.StartSolutionWorker(target, solutionChan, done)
 		}
 	}()
-}
-
-type BlockChain struct {
-	Prev    *Block
-	Current *Block
 }

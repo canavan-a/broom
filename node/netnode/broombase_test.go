@@ -8,10 +8,27 @@ import (
 )
 
 func TestGenerateGenesisHash(t *testing.T) {
+
+	// txns := make(map[string]Transaction)
+	// txns[GENESIS] = GENESIS_TXN
+
+	// var GENESIS_BLOCK = Block{
+	// 	Height:       GENESIS_BLOCK_HEIGHT,
+	// 	Timestamp:    time.Date(2001, time.November, 11, 0, 0, 0, 0, time.UTC).Unix(),
+	// 	Transactions: txns,
+	// }
+
+	// GENESIS_BLOCK.SignHash()
+	// err := bb.AddBlock(&GENESIS_BLOCK)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	//
 	txns := make(map[string]Transaction)
 	txns[GENESIS] = GENESIS_TXN
 
 	var GENESIS_BLOCK = Block{
+		Height:       GENESIS_BLOCK_HEIGHT,
 		Timestamp:    time.Date(2001, time.November, 11, 0, 0, 0, 0, time.UTC).Unix(),
 		Transactions: txns,
 	}
@@ -91,4 +108,103 @@ func TestGetHighestBlock(t *testing.T) {
 	}
 
 	fmt.Println(height, hash)
+}
+
+func TestMinePoW(t *testing.T) {
+
+	bb := InitBroombaseWithDir("broombase_test")
+
+	if bb.ledger.Balances[GENESIS_TXN.To] != STARTING_PAYOUT {
+
+		// t.Fail()
+		// return
+	}
+
+	txn := generateTransaction()
+	valid, err := txn.ValidateSig()
+	if err != nil {
+		t.Error(err)
+		t.Fail()
+		return
+	}
+	if !valid {
+		t.Error("could not verify sig")
+		t.Fail()
+		return
+	}
+
+	easyMiningTarget := "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+
+	myAddress := txn.From
+
+	block := NewBlock(myAddress, "test mining a block!", bb.ledger.BlockHash, bb.ledger.BlockHeight+1, int64(bb.ledger.CalculateCurrentReward()))
+	block.Add(txn)
+
+	done := make(chan struct{})
+
+	solution := make(chan Block)
+
+	block.MineWithWorkers(easyMiningTarget, 10, solution, done)
+
+	fmt.Println("block height: ", block.Height)
+
+	sol := <-solution
+	close(done)
+
+	time.Sleep(2 * time.Second)
+	fmt.Println("Completed")
+	fmt.Println(sol.Hash)
+
+	err = bb.ledger.ValidateBlock(sol)
+	if err != nil {
+		fmt.Println("FAILED TO VALIDATE BLOCK")
+		fmt.Println(err.Error())
+		t.Error()
+		t.Fail()
+		return
+	}
+
+	// store the valid block
+	err = bb.AddBlock(&sol)
+	if err != nil {
+		fmt.Println("FAILED TO STORE BLOCK")
+		t.Error()
+		t.Fail()
+		return
+	}
+
+	fmt.Println("block added to ledger:")
+	fmt.Println(bb.ledger.BlockHash)
+	fmt.Println(bb.ledger.BlockHeight)
+	fmt.Println("Balances: ")
+	fmt.Println(bb.ledger.Balances)
+	fmt.Println(bb.ledger.Nonces)
+	fmt.Println(bb.ledger.Pending)
+
+}
+
+func generateTransaction() (txn Transaction) {
+
+	txn = Transaction{
+		Sig:      "9ce786d7bcbd89c354ce1cf60af7feb42871b687940185ecf3a6030c58b2ffd7.2453dbbe27e8ff2049417ea8911270cbac99a209a437ea15c9c3120e2283442e",
+		Coinbase: false,
+		Note:     "This is a test txn",
+		Nonce:    1,
+		To:       "nobody to go to",
+		From:     "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==",
+		Amount:   3600,
+	}
+
+	return
+}
+
+func TestSignTransaction(t *testing.T) {
+	// this function only works if private key is supplied
+	privkey := ""
+	txn := generateTransaction()
+	err := txn.Sign(privkey)
+	if err != nil {
+		t.Fail()
+	}
+	fmt.Println(txn.Sig)
 }

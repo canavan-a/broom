@@ -49,6 +49,8 @@ This data is signed by the private key and added to the signature value.
 
 Only one coinbase txn is allowed per block. This should be written by the miner.
 
+The FIRST txn nonce from a user must be 1.
+
 ## Blocks
 
 To serialize we use the order as below with no spaces:
