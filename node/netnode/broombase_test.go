@@ -164,8 +164,16 @@ func TestMinePoW(t *testing.T) {
 		return
 	}
 
+	err = bb.ValidateBlockHeaders(block)
+	if err != nil {
+		fmt.Println("FAILED TO VALIDATE BLOCK HEADERS")
+		t.Error()
+		t.Fail()
+		return
+	}
+
 	// store the valid block
-	err = bb.AddBlock(&sol)
+	err = bb.AddAndSync(&sol)
 	if err != nil {
 		fmt.Println("FAILED TO STORE BLOCK")
 		t.Error()

@@ -114,7 +114,11 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 		GENESIS_BLOCK.SignHash()
 		fmt.Println(GENESIS_BLOCK.Hash)
 
-		err := bb.AddBlock(&GENESIS_BLOCK)
+		err := bb.ValidateBlockHeaders(&GENESIS_BLOCK)
+		if err != nil {
+			panic(err)
+		}
+		err = bb.AddAndSync(&GENESIS_BLOCK)
 		if err != nil {
 			panic(err)
 		}
@@ -191,7 +195,7 @@ func (bb *Broombase) getHighestBlock() (height int64, hash string, err error) {
 	return tiedEntries[0].height, tiedEntries[0].hash, nil
 }
 
-func (bb *Broombase) AddBlock(block *Block) error {
+func (bb *Broombase) ValidateBlockHeaders(block *Block) error {
 
 	if !block.ValidateHash() {
 		return errors.New("block error: invalid hash")
@@ -223,6 +227,11 @@ func (bb *Broombase) AddBlock(block *Block) error {
 			return errors.New("invalid genesis block hash, attemp made to attack genesis block")
 		}
 	}
+
+	return nil
+}
+
+func (bb *Broombase) AddAndSync(block *Block) error {
 
 	err := bb.StoreBlock(*block)
 	if err != nil {
@@ -589,13 +598,30 @@ func (l *Ledger) SyncNextBlock(validatedBlock Block) {
 
 }
 
+func (l *Ledger) CheckLedger(address string) (found bool, nonce int64, balance int64) {
+	l.mut.RLock()
+	defer l.mut.RUnlock()
+
+	nonce, found = l.Nonces[address]
+
+	balance, found = l.Balances[address]
+
+	return
+}
+
 // not ledger safe,
 // TODO: add logic to add on really old block > 30 or so old; prevents attacks
 func (bb *Broombase) ReceiveBlock(block Block) error {
+
+	err := bb.ValidateBlockHeaders(&block)
+	if err != nil {
+		return err
+	}
+
 	// check if it solves current puzzle
 	if bb.ledger.BlockHeight+1 == block.Height && bb.ledger.BlockHash == block.PreviousBlockHash {
 		// this is the next block
-		return bb.AddBlock(&block)
+		return bb.AddAndSync(&block)
 	} else {
 		// this block is not the correct puzzle target, we must still reconcile for forks
 		ledger, found := bb.GetLedgerAt(block.Hash, block.Height)
