@@ -459,22 +459,54 @@ func (l *Ledger) ValidateBlock(block Block) error {
 	for from, txnGroup := range accountTransactions {
 		// check nonces and sum
 
-		// check sum of txns is valid
-		var sendAmount int64
-		for _, txn := range txnGroup {
-			sendAmount += txn.Amount
-		}
-
-		if l.Balances[from]-sendAmount < 0 {
-			return errors.New("invalid ")
-		}
-
-		// check nonces
-		_, err := ValidateNonce(txnGroup, l.Nonces[from])
+		err := ValidateTransactionGroup(l.Balances[from], l.Nonces[from], txnGroup)
 		if err != nil {
 			return err
 		}
+	}
 
+	return nil
+
+}
+
+func (l *Ledger) GetAddressNonce(address string) (int64, bool) {
+	l.mut.RLock()
+	defer l.mut.RUnlock()
+
+	nonce, found := l.Nonces[address]
+
+	return nonce, found
+
+}
+
+func (l *Ledger) GetAddressBalance(address string) (int64, bool) {
+	l.mut.RLock()
+	defer l.mut.RUnlock()
+
+	balance, found := l.Balances[address]
+
+	return balance, found
+
+}
+
+// other block txns are needed to validate the current txn
+// The current "txn to validate" can be added to the list of the rest of the txns,
+func ValidateTransactionGroup(currentBalance int64, currentNonce int64, txns []Transaction) error {
+
+	// check sum of txns is valid
+	var sendAmount int64
+	for _, txn := range txns {
+		sendAmount += txn.Amount
+	}
+
+	if currentBalance-sendAmount < 0 {
+		return errors.New("invalid ")
+	}
+
+	// check nonces
+	_, err := ValidateNonce(txns, currentNonce)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -624,7 +656,8 @@ func (bb *Broombase) ReceiveBlock(block Block) error {
 		return bb.AddAndSync(&block)
 	} else {
 		// this block is not the correct puzzle target, we must still reconcile for forks
-		ledger, found := bb.GetLedgerAt(block.Hash, block.Height)
+		// get the ledger at the previous block value
+		ledger, found := bb.GetLedgerAt(block.PreviousBlockHash, block.Height-1)
 		if !found {
 			return errors.New("Block has no associated ledger, we do not have previous")
 		}

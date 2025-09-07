@@ -82,12 +82,29 @@ func (ex *Executor) RunLoop() {
 
 			sizeValid := txn.ValidateSize()
 
-			//TODO: validate nonce and balance against current ledger
-
 			if sigValid && sizeValid {
-				// ex.database.ledger.
-				ex.mempool[txn.Sig] = txn
-				ex.miningBlock.Add(txn)
+				//TODO: validate nonce and balance against current ledger
+				accountBalance, balanceFound := ex.database.ledger.GetAddressBalance(txn.From)
+
+				accountNonce, nonceFound := ex.database.ledger.GetAddressNonce(txn.From)
+
+				if balanceFound && nonceFound {
+
+					addressTxns := ex.getAddressTransactions(txn.From)
+
+					addressTxns = append(addressTxns, txn)
+					// toValidate := append(ex.miningBlock.Transactions... )
+					err := ValidateTransactionGroup(accountBalance, accountNonce, addressTxns)
+					if err != nil {
+						// pass: do nothing, txn is not validated
+
+					} else {
+						// we found a good txn, add it to the mempool
+						ex.mempool[txn.Sig] = txn
+						ex.miningBlock.Add(txn)
+					}
+				}
+
 			}
 
 			doneChan = make(chan struct{})
@@ -102,4 +119,17 @@ func (ex *Executor) RunLoop() {
 func (ex *Executor) Mine(solutionChan chan Block, doneChan chan struct{}) {
 
 	ex.miningBlock.MineWithWorkers(ex.database.ledger.CalculateNewMiningThreshold(), 10, solutionChan, doneChan)
+}
+
+func (ex *Executor) getAddressTransactions(address string) []Transaction {
+
+	var addressTxns []Transaction
+
+	for _, txn := range ex.miningBlock.Transactions {
+		if txn.From == address {
+			addressTxns = append(addressTxns, txn)
+		}
+	}
+
+	return addressTxns
 }
