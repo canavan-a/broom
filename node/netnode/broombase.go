@@ -17,7 +17,7 @@ const BROOMBASE_DEFAULT_DIR = "broombase"
 const LEDGER_DEFAULT_DIR = "ledger"
 
 const GENESIS_BLOCK_HEIGHT = 0
-const DEFAULT_MINING_THRESHOLD = "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+const DEFAULT_MINING_THRESHOLD = "00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 type Broombase struct {
 	mut       sync.RWMutex
@@ -239,6 +239,7 @@ func (bb *Broombase) AddAndSync(block *Block) error {
 	}
 
 	if bb.ledger.BlockHeight < block.Height {
+		fmt.Println("syncing ledger")
 		err = bb.SyncLedger(block.Height, block.Hash)
 		if err != nil {
 			return err
@@ -332,6 +333,7 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 
 	err := bb.StoreLedger(startBlockHash, startBlockHeight)
 	if err != nil {
+		fmt.Println("storing ledger in database")
 		return err
 	}
 
@@ -339,14 +341,18 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 }
 
 func (bb *Broombase) StoreLedger(hash string, height int64) error {
-	bb.ledger.mut.Lock()
-	defer bb.ledger.mut.Unlock()
 
 	_, found := bb.GetLedgerAt(hash, height)
 	if found {
+		fmt.Println("Ledger found, not storing")
 		// we already have the ledger
 		return nil
 	}
+
+	fmt.Println("Storing ledger", height, hash)
+
+	bb.ledger.mut.Lock()
+	defer bb.ledger.mut.Unlock()
 
 	data, err := json.Marshal(bb.ledger)
 	if err != nil {
@@ -358,14 +364,17 @@ func (bb *Broombase) StoreLedger(hash string, height int64) error {
 }
 
 func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
-	bb.ledger.mut.Lock()
-	defer bb.ledger.mut.Unlock()
 
 	_, found := bb.GetLedgerAt(ledger.BlockHash, ledger.BlockHeight)
 	if found {
 		// we already have the ledger
 		return nil
 	}
+
+	bb.ledger.mut.Lock()
+	defer bb.ledger.mut.Unlock()
+
+	fmt.Println("storage lock aquired")
 
 	data, err := json.Marshal(ledger)
 	if err != nil {
@@ -381,23 +390,23 @@ func (bb *Broombase) GetLedgerAt(hash string, height int64) (*Ledger, bool) {
 	bb.ledger.mut.RLock()
 	defer bb.ledger.mut.RUnlock()
 
-	path := fmt.Sprintf("%s/%d_%s.broom", bb.dir, height, hash)
+	path := fmt.Sprintf("%s/%d_%s.broomledger", bb.ledgerDir, height, hash)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// file not found or read error
 		return nil, false
 	}
 
-	var ledger Ledger
+	ledger := &Ledger{}
 
-	err = json.Unmarshal(data, &ledger)
+	err = json.Unmarshal(data, ledger)
 	if err != nil {
 		return nil, false
 	}
 
-	ledger.mut = &sync.RWMutex{}
+	// ledger.mut = &sync.RWMutex{}
 
-	return &ledger, true
+	return ledger, true
 }
 
 // block must validate against current ledger
@@ -406,6 +415,8 @@ func (l *Ledger) ValidateBlock(block Block) error {
 
 	l.mut.RLock()
 	defer l.mut.RUnlock()
+
+	fmt.Println("lock aquired")
 
 	if block.CalculateHash() != block.Hash {
 		return errors.New("ValidateBlock: signed hash is incorrect for block")
@@ -426,6 +437,8 @@ func (l *Ledger) ValidateBlock(block Block) error {
 	}
 
 	accountTransactions := make(map[string][]Transaction)
+
+	fmt.Println("starting moving through txns")
 
 	coinbaseTxns := 0
 	for _, txn := range block.Transactions {
@@ -456,6 +469,8 @@ func (l *Ledger) ValidateBlock(block Block) error {
 
 	}
 
+	fmt.Println("starting nonce validation")
+
 	for from, txnGroup := range accountTransactions {
 		// check nonces and sum
 
@@ -464,6 +479,8 @@ func (l *Ledger) ValidateBlock(block Block) error {
 			return err
 		}
 	}
+
+	fmt.Println("done validating block")
 
 	return nil
 
@@ -662,17 +679,50 @@ func (bb *Broombase) ReceiveBlock(block Block) error {
 			return errors.New("Block has no associated ledger, we do not have previous")
 		}
 
+		ledger.mut = &sync.RWMutex{}
+
+		fmt.Println("LEDGER FOUND")
+		fmt.Println("ledger: ", ledger)
+
 		err := ledger.ValidateBlock(block)
 		if err != nil {
 			fmt.Println(err)
 			return errors.New("could not validate block of prev value ledger")
 		}
+		fmt.Println("syncing the block")
 		ledger.SyncNextBlock(block)
+		fmt.Println("done syncing")
 		err = bb.StoreGivenLedger(ledger)
+		if err != nil {
+			return err
+		}
+		err = bb.StoreBlock(block)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// used for testing only
+func (bb *Broombase) GetFirstBlockByHeight(height int) (string, bool) {
+	bb.mut.RLock()
+	files, err := os.ReadDir(bb.dir)
+	bb.mut.RUnlock()
+	if err != nil {
+		return "", false
+	}
+
+	for _, file := range files {
+		splitName := strings.Split(file.Name(), "_")
+		heightValue, _ := strconv.Atoi(splitName[0])
+		if heightValue == height {
+			hashValue := strings.Split(splitName[1], ".broom")[0]
+			return hashValue, true
+		}
+	}
+
+	return "", false
+
 }

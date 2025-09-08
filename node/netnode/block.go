@@ -125,14 +125,13 @@ func (b *Block) RotateMiningValues() (hash string) {
 }
 
 func (b Block) StartSolutionWorker(target string, solutionChan chan Block, done chan struct{}) {
-
+	fmt.Println("worker started")
 	for {
 		select {
 		case <-done:
 			return
 		default:
 			b.RotateMiningValues()
-			fmt.Println(b.Hash)
 			if CompareHash(b.Hash, target) {
 				select {
 				case solutionChan <- b:

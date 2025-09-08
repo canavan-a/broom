@@ -14,9 +14,17 @@ type Executor struct {
 	note    string
 }
 
-func NewExecutor(seeds []string, myAddress string, miningNote string) *Executor {
+func NewExecutor(seeds []string, myAddress string, miningNote string, mock bool) *Executor {
+
+	var node *Node
+	if mock {
+		node = nil
+	} else {
+		node = ActivateNode(seeds...)
+
+	}
+
 	bb := NewBroombase()
-	node := ActivateNode(seeds...)
 	blockChan := make(chan Block)
 	txnChan := make(chan Transaction)
 	mempool := make(map[string]Transaction)
@@ -27,7 +35,7 @@ func NewExecutor(seeds []string, myAddress string, miningNote string) *Executor 
 		blockChan:   blockChan,
 		txnChan:     txnChan,
 		mempool:     mempool,
-		miningBlock: NewBlock(myAddress, miningNote, bb.ledger.BlockHash, bb.ledger.BlockHeight, int64(bb.ledger.CalculateCurrentReward())),
+		miningBlock: NewBlock(myAddress, miningNote, bb.ledger.BlockHash, bb.ledger.BlockHeight+1, int64(bb.ledger.CalculateCurrentReward())),
 
 		address: myAddress,
 		note:    miningNote,
@@ -35,25 +43,40 @@ func NewExecutor(seeds []string, myAddress string, miningNote string) *Executor 
 }
 
 func (ex *Executor) ResetMiningBlock() {
-	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight, int64(ex.database.ledger.CalculateCurrentReward()))
+	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight+1, int64(ex.database.ledger.CalculateCurrentReward()))
 }
 
-func (ex *Executor) RunLoop() {
+func (ex *Executor) RunNetworkSync() {
+	// Get my highest block
+	// Request highest block from peers
+	// Determine algorithm to sync with network
+
+	// Algorith:
+	// See if my block is in peers "main" chain
+	// YES -> request each next block (request by previous)
+	// NO -> step back each block until satisfied
+}
+
+func (ex *Executor) RunMiningLoop() {
 
 	doneChan := make(chan struct{})
 
 	ex.Mine(ex.blockChan, doneChan)
+	fmt.Println("mining started")
 
 	for {
-
+		fmt.Println("starting new cycle")
 		select {
 		case block := <-ex.blockChan:
 
 			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height
 
 			// stop mining, handle block validation and storage, start mining again
-			fmt.Println("incoming network block")
+			fmt.Println("incoming block (network or self)")
 			close(doneChan)
+			fmt.Println(block.Height)
+			fmt.Println("hash: ", block.Hash)
+			fmt.Println("prev: ", block.PreviousBlockHash)
 			err := ex.database.ReceiveBlock(block)
 			if err != nil {
 				fmt.Println("Block invalid: ", err)
@@ -118,7 +141,7 @@ func (ex *Executor) RunLoop() {
 
 func (ex *Executor) Mine(solutionChan chan Block, doneChan chan struct{}) {
 
-	ex.miningBlock.MineWithWorkers(ex.database.ledger.CalculateNewMiningThreshold(), 10, solutionChan, doneChan)
+	ex.miningBlock.MineWithWorkers(ex.database.ledger.CalculateNewMiningThreshold(), 2, solutionChan, doneChan)
 }
 
 func (ex *Executor) getAddressTransactions(address string) []Transaction {
