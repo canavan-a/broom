@@ -2,6 +2,8 @@ package netnode
 
 import "fmt"
 
+const EXECUTOR_WORKER_COUNT = 4
+
 type Executor struct {
 	node        *Node
 	database    *Broombase
@@ -14,7 +16,7 @@ type Executor struct {
 	note    string
 }
 
-func NewExecutor(seeds []string, myAddress string, miningNote string, mock bool) *Executor {
+func NewExecutor(seeds []string, myAddress string, miningNote string, dir string, ledgerDir string, mock bool) *Executor {
 
 	var node *Node
 	if mock {
@@ -24,7 +26,7 @@ func NewExecutor(seeds []string, myAddress string, miningNote string, mock bool)
 
 	}
 
-	bb := NewBroombase()
+	bb := InitBroombaseWithDir(dir, ledgerDir)
 	blockChan := make(chan Block)
 	txnChan := make(chan Transaction)
 	mempool := make(map[string]Transaction)
@@ -141,7 +143,7 @@ func (ex *Executor) RunMiningLoop() {
 
 func (ex *Executor) Mine(solutionChan chan Block, doneChan chan struct{}) {
 
-	ex.miningBlock.MineWithWorkers(ex.database.ledger.CalculateNewMiningThreshold(), 2, solutionChan, doneChan)
+	ex.miningBlock.MineWithWorkers(ex.database.ledger.CalculateNewMiningThreshold(), EXECUTOR_WORKER_COUNT, solutionChan, doneChan)
 }
 
 func (ex *Executor) getAddressTransactions(address string) []Transaction {

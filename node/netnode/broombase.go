@@ -17,7 +17,9 @@ const BROOMBASE_DEFAULT_DIR = "broombase"
 const LEDGER_DEFAULT_DIR = "ledger"
 
 const GENESIS_BLOCK_HEIGHT = 0
-const DEFAULT_MINING_THRESHOLD = "00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+
+const BLOCK_SPEED_AVERAGE_WINDOW = 50
+const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 type Broombase struct {
 	mut       sync.RWMutex
@@ -48,12 +50,12 @@ type Ledger struct {
 	Pending             []PendingBalance `json:"pending"`
 }
 
-var GENESIS_HASH = "d019918738cc138a3c693b48ce98304e4adfd96dc70cbe9bca0c027f81c55b6c"
+var GENESIS_HASH = "fd1cb7926a4447454a00a3c5c75126ad8ec053bc5ba61d706ca687428c8af5ac"
 
 var GENESIS_TXN = Transaction{
 	Coinbase: false, // skip vesting schedule
 	To:       "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==",
-	Note:     "It is written, my house will be called a house of prayer, but you are making it a den of thieves!",
+	Note:     "Matthew 5:16",
 	Amount:   STARTING_PAYOUT,
 }
 
@@ -569,7 +571,8 @@ func (l *Ledger) Accumulate(b Block) {
 	l.BlockHeight = b.Height
 	l.BlockHash = b.Hash
 
-	l.BlockTime = append(l.BlockTime, BlockTime{
+	// loads the block time array in prep for averaging
+	l._transitionBlockTimeArray(BlockTime{
 		Height: b.Height,
 		Time:   b.GetTimestampTime(),
 	})
@@ -622,6 +625,7 @@ func (l *Ledger) Accumulate(b Block) {
 }
 
 func (l *Ledger) CalculateNewMiningThreshold() string {
+
 	return DEFAULT_MINING_THRESHOLD
 }
 
@@ -725,4 +729,28 @@ func (bb *Broombase) GetFirstBlockByHeight(height int) (string, bool) {
 
 	return "", false
 
+}
+
+func (l *Ledger) _transitionBlockTimeArray(bt BlockTime) {
+	if len(l.BlockTime) < BLOCK_SPEED_AVERAGE_WINDOW {
+		l.BlockTime = append(l.BlockTime, bt)
+	} else {
+		minHeight := l.BlockTime[0].Height
+		for _, curBt := range l.BlockTime {
+			if minHeight < curBt.Height {
+				minHeight = curBt.Height
+			}
+		}
+
+		newBlockTime := []BlockTime{}
+
+		for _, curBt := range l.BlockTime {
+			if curBt.Height != minHeight {
+				newBlockTime = append(newBlockTime, curBt)
+			}
+		}
+
+		l.BlockTime = newBlockTime
+
+	}
 }

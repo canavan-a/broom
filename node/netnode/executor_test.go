@@ -2,20 +2,42 @@ package netnode
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
 
 func TestExecutor(t *testing.T) {
-	ex := NewExecutor([]string{}, "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==", "hello", true)
+	ex := NewExecutor([]string{},
+		"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==",
+		"hello",
+		"",
+		"",
+		true)
 
 	ex.RunMiningLoop()
 }
 
 func TestFork(t *testing.T) {
-	ex := NewExecutor([]string{}, "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==", "hello", true)
+	ledgerDir := "ledger"
+	broombaseDir := "broombase"
+	err := os.Remove(ledgerDir)
+	if err != nil {
+		// panic(err)
+	}
+	err = os.Remove(broombaseDir)
+	if err != nil {
+		// panic(err)
+	}
 
-	// go ex.RunMiningLoop()
+	ex := NewExecutor([]string{},
+		"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==",
+		"hello",
+		broombaseDir,
+		ledgerDir,
+		true)
+
+	go ex.RunMiningLoop()
 
 	WaitForBlock(3, ex)
 
@@ -33,11 +55,6 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 				panic("block not found, but previously found")
 			}
 
-			// currentLedger, found := ex.database.GetLedgerAt(blockHash, block.Height)
-			// if !found {
-			// 	panic("ledger not found, but block found")
-			// }
-
 			blockChanLocal := make(chan Block)
 			doneChanLocal := make(chan struct{})
 
@@ -51,6 +68,32 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 
 			time.Sleep(4 * time.Second)
 			ex.database.ReceiveBlock(solution)
+
+			blockChanLocal = make(chan Block)
+			doneChanLocal = make(chan struct{})
+
+			solution.PreviousBlockHash = solution.Hash
+			solution.Height = solution.Height + 1
+
+			solution.MineWithWorkers(DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal)
+
+			solution2 := <-blockChanLocal
+			close(doneChanLocal)
+
+			ex.database.ReceiveBlock(solution2)
+
+			blockChanLocal = make(chan Block)
+			doneChanLocal = make(chan struct{})
+
+			solution2.PreviousBlockHash = solution2.Hash
+			solution2.Height = solution2.Height + 1
+
+			solution2.MineWithWorkers(DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal)
+
+			solution3 := <-blockChanLocal
+			close(doneChanLocal)
+
+			ex.database.ReceiveBlock(solution3)
 
 			return
 		}

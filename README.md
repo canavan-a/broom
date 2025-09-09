@@ -20,6 +20,14 @@ protocol looks like:
 
 ## Cryptography
 
+### PoW: Argon2d
+
+The hash function used in mining as well as transaction signing is a Argon2d. This is a variant of Argon2 that is memory hardened. The goal is to resist against ASIC and GPU mining. Argon2d has a higher resistence to these attacks because it is data dependent. The library used was the `golang.org/x/crypto/argon2` implementation. This library does NOT expose Argon2d because it is actually vulnerable to side channel attacks. Thankfully this project is not hashing passwords so we can use it. This repo was copied and modified with source in the crypto module of this project.
+
+The settled on configuration for argon is: 512MB and 2 threads.
+
+### Wallet pub/piv keys
+
 The asymetric keys type used are Ed25519 Elliptic curve keys. The wallet address is equivalent to the public key. The public key gets transmitted as the hex output of the X, Y values concatted together. Because of the EC algorithm the length is fine for wallet addresses and the lengths are consistently 32 bits.
 
 The signiature for signed data is transmitted as string value of the two value signiatures. This is R.S where the two components of hash are separated between a period. These values are parsed and used to validate the authenticity of the transaction data.
