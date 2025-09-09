@@ -24,7 +24,7 @@ protocol looks like:
 
 The hash function used in mining as well as transaction signing is a Argon2d. This is a variant of Argon2 that is memory hardened. The goal is to resist against ASIC and GPU mining. Argon2d has a higher resistence to these attacks because it is data dependent. The library used was the `golang.org/x/crypto/argon2` implementation. This library does NOT expose Argon2d because it is actually vulnerable to side channel attacks. Thankfully this project is not hashing passwords so we can use it. This repo was copied and modified with source in the crypto module of this project.
 
-The settled on configuration for argon is: 512MB and 2 threads. 
+The settled on configuration for argon is: 512MB and 2 threads.
 
 ### Wallet pub/piv keys
 
