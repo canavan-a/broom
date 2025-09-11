@@ -66,6 +66,43 @@ func (ex *Executor) RunNetworkSync() {
 	// See if my block is in peers "main" chain
 	// YES -> request each next block (request by previous)
 	// NO -> step back each block until satisfied
+
+	height, _, err := ex.database.getHighestBlock()
+	if err != nil {
+		panic(err)
+	}
+
+	peerHash, peerHeight, err := ex.node.SamplePeersHighestBlock()
+	if err != nil {
+		// no pers I guess...
+		fmt.Println("No peer responses for highest hash")
+		return
+	}
+
+	if height == int64(peerHeight) {
+		// we are synced to the chain
+		return
+	}
+
+	// get first block of the loop
+	peerMaxBlock, err := ex.node.SamplePeersBlock("block", peerHeight, peerHash)
+	if err != nil {
+		panic(err)
+	}
+	// we cant store this securely because we dont have a previous block, we should store these in a temp dir and then move them over and validate them
+	fmt.Println(peerMaxBlock)
+
+	prev := peerMaxBlock
+	// sync loop
+	for {
+		prev, err := ex.node.SamplePeersBlock("block", int(prev.Height)-1, prev.PreviousBlockHash)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(prev)
+	}
+
 }
 
 func (ex *Executor) RunMiningLoop() {
@@ -171,23 +208,26 @@ func (ex *Executor) getAddressTransactions(address string) []Transaction {
 func (ex *Executor) SetupHttpServer() {
 	go func() {
 		ex.mux = http.NewServeMux()
-		ex.server_GetBlock()
+		ex.server_GetBlock() // actually post still
 		ex.server_GetAddressDetails()
 		ex.server_PostTransaction()
-		ex.server_PostBlock()
+		ex.server_PostBlock() // receives a block
+		ex.server_HighestBlock()
 
-		http.ListenAndServe(":8080", ex.mux)
+		http.ListenAndServe(fmt.Sprintf(":%s", EXPOSED_PORT), ex.mux)
 	}()
 
 }
 
+type HashHeight struct {
+	Height int    `json:"height"`
+	Hash   string `json:"hash"`
+}
+
 func (ex *Executor) server_GetBlock() {
-	ex.mux.Handle("/block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		type Payload struct {
-			Height int    `json:"height"`
-			Hash   string `json:"hash"`
-		}
-		var p Payload
+	ex.mux.Handle("/block_get", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		var p HashHeight
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 			http.Error(w, err.Error(), 400)
 			return
@@ -281,6 +321,28 @@ func (ex *Executor) server_PostBlock() {
 		// ingress txn
 		ex.blockChan <- block
 		w.Write([]byte("ok"))
+
+	}))
+}
+
+func (ex *Executor) server_HighestBlock() {
+	ex.mux.Handle("/highest_block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		var hh HashHeight
+
+		height, hash, err := ex.database.getHighestBlock()
+		if err != nil {
+			http.Error(w, "highest block not found", 404)
+			return
+		}
+
+		hh.Hash = hash
+		hh.Height = int(height)
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(hh); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 
 	}))
 }

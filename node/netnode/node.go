@@ -1,15 +1,20 @@
 package netnode
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/canavan-a/broom/node/crypto"
 )
 
 const TCP_PORT = "4188"
@@ -23,6 +28,8 @@ const MAX_PEER_CONNECTIONS = 200
 const PROTOCOL_MAX_SIZE = 30_000_000
 
 const PEER_SAMPLE_SIZE = 30
+
+const EXPOSED_PORT = "8080"
 
 var START_DELIMETER = []byte{0x01, 0x14}
 
@@ -332,20 +339,203 @@ func (n *Node) DropRandomPeer() bool {
 	return false
 }
 
-func (n *Node) requestPeer(ipAddress string) (response Block) {
+func (n *Node) requestPeerBlock(ipAddress string, path string, height int, hash string) (response Block, err error) {
 
-	var data Block
+	type Payload struct {
+		Height int    `json:"height"`
+		Hash   string `json:"hash"`
+	}
 
-	json.Unmarshal([]byte{}, &data)
+	p := Payload{
+		Height: height,
+		Hash:   hash,
+	}
+
+	payloadData, err := json.Marshal(p)
+	if err != nil {
+		return
+	}
+
+	resp, err := http.Post(fmt.Sprintf("http://%s:%s/%s", ipAddress, EXPOSED_PORT, path), "application/json", bytes.NewBuffer(payloadData))
+	if err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		err = errors.New("bad request")
+		return
+
+	}
+
+	var block Block
+
+	err = json.NewDecoder(resp.Body).Decode(&block)
+	if err != nil {
+		return
+	}
 
 	return
 }
 
-func SamplePeers(n *Node) (consensus Block) {
-	// n.mutex.Lock()
-	// // sample for n peer's addresses
-	// n.mutex.Unlock()
+func (n *Node) SamplePeersBlock(path string, height int, hash string) (consensus Block, err error) {
 
-	block := n.requestPeer("192.168.1.1")
-	return block
+	sample := n.GetAddressSample()
+
+	wg := sync.WaitGroup{}
+	mut := sync.Mutex{}
+
+	var sharedSample []Block
+
+	for _, peerAddress := range sample {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			block, err := n.requestPeerBlock(addr, path, height, hash)
+			if err == nil {
+				mut.Lock()
+				sharedSample = append(sharedSample, block)
+				mut.Unlock()
+			}
+
+		}(peerAddress)
+	}
+	wg.Wait()
+
+	if len(sharedSample) == 0 {
+		err = errors.New("no block found")
+		return
+	}
+
+	// check consensus and reconcile
+	type BlockCount struct {
+		Block Block
+		Count int
+	}
+
+	summary := make(map[string]BlockCount)
+
+	for _, value := range sharedSample {
+		fastHash := crypto.Sha256Hash(value.Serialize())
+		summary[fastHash] = BlockCount{
+			Block: value,
+			Count: summary[fastHash].Count + 1,
+		}
+	}
+
+	var result Block
+	var best int
+
+	for _, value := range summary {
+		if value.Count > best {
+			result = value.Block
+			best = value.Count
+		}
+	}
+
+	return result, nil
+}
+
+func (n *Node) requestPeerHighestBlock(ipAddress string) (response HashHeight, err error) {
+
+	resp, err := http.Get(fmt.Sprintf("http://%s:%s/highest_block", ipAddress, EXPOSED_PORT))
+	if err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		err = errors.New("bad request")
+		return
+
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
+
+	sample := n.GetAddressSample()
+
+	wg := sync.WaitGroup{}
+	mut := sync.Mutex{}
+
+	var sharedSample []HashHeight
+
+	for _, peerAddress := range sample {
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+			hh, err := n.requestPeerHighestBlock(addr)
+			if err == nil {
+				mut.Lock()
+				sharedSample = append(sharedSample, hh)
+				mut.Unlock()
+			}
+
+		}(peerAddress)
+	}
+	wg.Wait()
+
+	if len(sharedSample) == 0 {
+		err = errors.New("no hh found")
+		return
+	}
+
+	// check consensus and reconcile
+	type HashHeightCount struct {
+		HashHeight HashHeight
+		Count      int
+	}
+
+	summary := make(map[string]HashHeightCount)
+
+	for _, value := range sharedSample {
+		summary[value.Hash] = HashHeightCount{
+			HashHeight: value,
+			Count:      summary[value.Hash].Count + 1,
+		}
+	}
+
+	var result HashHeight
+	var best int
+
+	for _, value := range summary {
+		if value.Count > best {
+			result = value.HashHeight
+			best = value.Count
+		}
+	}
+
+	return result.Hash, result.Height, nil
+}
+
+func (n *Node) GetAddressSample() []string {
+	n.mutex.Lock()
+	// // sample for n peer's addresses
+	var allAddresses []string
+	for _, peer := range n.peers {
+		allAddresses = append(allAddresses, peer.address)
+	}
+	n.mutex.Unlock()
+
+	rand.Shuffle(len(allAddresses), func(i, j int) {
+		allAddresses[i], allAddresses[j] = allAddresses[j], allAddresses[i]
+	})
+
+	var sample []string
+	if len(allAddresses) >= PEER_SAMPLE_SIZE {
+		sample = allAddresses[0:PEER_SAMPLE_SIZE]
+	} else {
+		sample = allAddresses
+	}
+
+	return sample
 }
