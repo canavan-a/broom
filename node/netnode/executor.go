@@ -1,6 +1,10 @@
 package netnode
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
 
 const EXECUTOR_WORKER_COUNT = 4
 
@@ -14,6 +18,8 @@ type Executor struct {
 
 	address string
 	note    string
+
+	mux *http.ServeMux
 }
 
 func NewExecutor(seeds []string, myAddress string, miningNote string, dir string, ledgerDir string, mock bool) *Executor {
@@ -31,7 +37,7 @@ func NewExecutor(seeds []string, myAddress string, miningNote string, dir string
 	txnChan := make(chan Transaction)
 	mempool := make(map[string]Transaction)
 
-	return &Executor{
+	ex := &Executor{
 		node:        node,
 		database:    bb,
 		blockChan:   blockChan,
@@ -42,6 +48,9 @@ func NewExecutor(seeds []string, myAddress string, miningNote string, dir string
 		address: myAddress,
 		note:    miningNote,
 	}
+	// ex.SetupHttpServer()
+
+	return ex
 }
 
 func (ex *Executor) ResetMiningBlock() {
@@ -157,4 +166,121 @@ func (ex *Executor) getAddressTransactions(address string) []Transaction {
 	}
 
 	return addressTxns
+}
+
+func (ex *Executor) SetupHttpServer() {
+	go func() {
+		ex.mux = http.NewServeMux()
+		ex.server_GetBlock()
+		ex.server_GetAddressDetails()
+		ex.server_PostTransaction()
+		ex.server_PostBlock()
+
+		http.ListenAndServe(":8080", ex.mux)
+	}()
+
+}
+
+func (ex *Executor) server_GetBlock() {
+	ex.mux.Handle("/block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		type Payload struct {
+			Height int    `json:"height"`
+			Hash   string `json:"hash"`
+		}
+		var p Payload
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		block, found := ex.database.GetBlock(p.Hash, int64(p.Height))
+		if !found {
+			http.Error(w, "block not found", 404)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(block); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+	}))
+}
+
+func (ex *Executor) server_GetAddressDetails() {
+	ex.mux.Handle("/address", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		type Payload struct {
+			Address string `json:"address"`
+		}
+		type Response struct {
+			Balance int64 `json:"balance"`
+			Nonce   int64 `json:"nonce"`
+		}
+		var p Payload
+		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		var res Response
+
+		found, nonce, balance := ex.database.ledger.CheckLedger(p.Address)
+		if !found {
+			http.Error(w, "address details not found", 404)
+			return
+		}
+
+		res.Balance = balance
+		res.Nonce = nonce
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(res); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+	}))
+}
+
+func (ex *Executor) server_PostTransaction() {
+	ex.mux.Handle("/transaction", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		var txn Transaction
+		if err := json.NewDecoder(r.Body).Decode(&txn); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		sizeValidated := txn.ValidateSize()
+		if !sizeValidated {
+			http.Error(w, "invalid txn size", 400)
+			return
+		}
+
+		validated, err := txn.ValidateSig()
+		if err != nil || !validated {
+			http.Error(w, "invalid txn", 400)
+			return
+		}
+
+		// ingress txn
+		ex.txnChan <- txn
+		w.Write([]byte("ok"))
+
+	}))
+}
+
+func (ex *Executor) server_PostBlock() {
+	ex.mux.Handle("/block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		var block Block
+		if err := json.NewDecoder(r.Body).Decode(&block); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		// ingress txn
+		ex.blockChan <- block
+		w.Write([]byte("ok"))
+
+	}))
 }

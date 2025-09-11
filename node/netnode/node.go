@@ -22,6 +22,8 @@ const MAX_PEER_CONNECTIONS = 200
 
 const PROTOCOL_MAX_SIZE = 30_000_000
 
+const PEER_SAMPLE_SIZE = 30
+
 var START_DELIMETER = []byte{0x01, 0x14}
 
 type MessageType string
@@ -328,4 +330,22 @@ func (n *Node) DropRandomPeer() bool {
 	}
 
 	return false
+}
+
+func (n *Node) requestPeer(ipAddress string) (response Block) {
+
+	var data Block
+
+	json.Unmarshal([]byte{}, &data)
+
+	return
+}
+
+func SamplePeers(n *Node) (consensus Block) {
+	// n.mutex.Lock()
+	// // sample for n peer's addresses
+	// n.mutex.Unlock()
+
+	block := n.requestPeer("192.168.1.1")
+	return block
 }

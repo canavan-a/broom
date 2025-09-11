@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -118,4 +119,10 @@ func RawHashArgon2d(data []byte) []byte {
 		ARGON2D_OUTPUT_LENGTH,
 	)
 	return hash
+}
+
+func Sha256Hash(data []byte) string {
+	hash := sha256.Sum256(data)
+
+	return hex.EncodeToString(hash[:])
 }
