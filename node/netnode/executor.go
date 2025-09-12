@@ -67,6 +67,8 @@ func (ex *Executor) RunNetworkSync() {
 	// YES -> request each next block (request by previous)
 	// NO -> step back each block until satisfied
 
+	// what if multiple blocks are added during this operation; we loop the network sync until it returns out directly (return a bool)
+
 	height, _, err := ex.database.getHighestBlock()
 	if err != nil {
 		panic(err)

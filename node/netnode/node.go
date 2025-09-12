@@ -2,6 +2,7 @@ package netnode
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -339,7 +340,7 @@ func (n *Node) DropRandomPeer() bool {
 	return false
 }
 
-func (n *Node) requestPeerBlock(ipAddress string, path string, height int, hash string) (response Block, err error) {
+func (n *Node) requestPeerBlock(ctx context.Context, ipAddress string, path string, height int, hash string) (response Block, err error) {
 
 	type Payload struct {
 		Height int    `json:"height"`
@@ -356,11 +357,15 @@ func (n *Node) requestPeerBlock(ipAddress string, path string, height int, hash 
 		return
 	}
 
-	resp, err := http.Post(fmt.Sprintf("http://%s:%s/%s", ipAddress, EXPOSED_PORT, path), "application/json", bytes.NewBuffer(payloadData))
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://%s:%s/%s", ipAddress, EXPOSED_PORT, path), bytes.NewReader(payloadData))
 	if err != nil {
 		return
 	}
 
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
@@ -386,13 +391,15 @@ func (n *Node) SamplePeersBlock(path string, height int, hash string) (consensus
 	wg := sync.WaitGroup{}
 	mut := sync.Mutex{}
 
+	ctx := context.Background()
+
 	var sharedSample []Block
 
 	for _, peerAddress := range sample {
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
-			block, err := n.requestPeerBlock(addr, path, height, hash)
+			block, err := n.requestPeerBlock(ctx, addr, path, height, hash)
 			if err == nil {
 				mut.Lock()
 				sharedSample = append(sharedSample, block)
@@ -437,13 +444,17 @@ func (n *Node) SamplePeersBlock(path string, height int, hash string) (consensus
 	return result, nil
 }
 
-func (n *Node) requestPeerHighestBlock(ipAddress string) (response HashHeight, err error) {
+func (n *Node) requestPeerHighestBlock(ctx context.Context, ipAddress string) (response HashHeight, err error) {
 
-	resp, err := http.Get(fmt.Sprintf("http://%s:%s/highest_block", ipAddress, EXPOSED_PORT))
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://%s:%s/highest_block", ipAddress, EXPOSED_PORT), nil)
 	if err != nil {
 		return
 	}
 
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
@@ -467,13 +478,14 @@ func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
 	wg := sync.WaitGroup{}
 	mut := sync.Mutex{}
 
+	ctx := context.Background()
 	var sharedSample []HashHeight
 
 	for _, peerAddress := range sample {
 		wg.Add(1)
 		go func(addr string) {
 			defer wg.Done()
-			hh, err := n.requestPeerHighestBlock(addr)
+			hh, err := n.requestPeerHighestBlock(ctx, addr)
 			if err == nil {
 				mut.Lock()
 				sharedSample = append(sharedSample, hh)
@@ -538,4 +550,33 @@ func (n *Node) GetAddressSample() []string {
 	}
 
 	return sample
+}
+
+func (n *Node) RacePeersForValidBlock(hash string, height int, err error) (Block, error) {
+
+	ctx := context.Background()
+
+	var block Block
+	var found bool
+
+	sample := n.GetAddressSample()
+	for _, address := range sample {
+		// we cant "race" because our CPU would go nuts hashing argons
+		foundBlock, err := n.requestPeerBlock(ctx, address, "block", height, hash)
+		if err == nil {
+			serialized := block.Serialize()
+			if crypto.Hash(serialized) == hash {
+				block = foundBlock
+				found = true
+				break
+			}
+		}
+
+	}
+
+	if found {
+		return block, nil
+	} else {
+		return Block{}, errors.New("no block found, need to resample")
+	}
 }
