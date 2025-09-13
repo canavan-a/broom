@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"sync"
 )
 
 const EXECUTOR_WORKER_COUNT = 4
@@ -22,15 +24,7 @@ type Executor struct {
 	mux *http.ServeMux
 }
 
-func NewExecutor(seeds []string, myAddress string, miningNote string, dir string, ledgerDir string, mock bool) *Executor {
-
-	var node *Node
-	if mock {
-		node = nil
-	} else {
-		node = ActivateNode(seeds...)
-
-	}
+func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string) *Executor {
 
 	bb := InitBroombaseWithDir(dir, ledgerDir)
 	blockChan := make(chan Block)
@@ -38,7 +32,6 @@ func NewExecutor(seeds []string, myAddress string, miningNote string, dir string
 	mempool := make(map[string]Transaction)
 
 	ex := &Executor{
-		node:        node,
 		database:    bb,
 		blockChan:   blockChan,
 		txnChan:     txnChan,
@@ -48,16 +41,39 @@ func NewExecutor(seeds []string, myAddress string, miningNote string, dir string
 		address: myAddress,
 		note:    miningNote,
 	}
-	// ex.SetupHttpServer()
 
 	return ex
+}
+
+func (ex *Executor) Start(seeds ...string) {
+
+	ex.node = ActivateNode(seeds...)
+
+	fmt.Println("Starting rest server")
+	ex.SetupHttpServer()
+
+	fmt.Println("Syncing to network")
+	ex.NetworkSync()
+
+	fmt.Println("Node running")
+	ex.RunMiningLoop()
+
 }
 
 func (ex *Executor) ResetMiningBlock() {
 	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight+1, int64(ex.database.ledger.CalculateCurrentReward()))
 }
 
-func (ex *Executor) RunNetworkSync() {
+func (ex *Executor) NetworkSync() {
+	for {
+		caughtUp := ex.RunNetworkSync()
+		if caughtUp {
+			break
+		}
+	}
+}
+
+func (ex *Executor) RunNetworkSync() (caughtUp bool) {
 	// Get my highest block
 	// Request highest block from peers
 	// Determine algorithm to sync with network
@@ -77,33 +93,77 @@ func (ex *Executor) RunNetworkSync() {
 	peerHash, peerHeight, err := ex.node.SamplePeersHighestBlock()
 	if err != nil {
 		// no pers I guess...
-		fmt.Println("No peer responses for highest hash")
-		return
+		fmt.Println("No peer responses for highest hash, going solo")
+		return true
 	}
 
 	if height == int64(peerHeight) {
 		// we are synced to the chain
-		return
+		return true
 	}
 
+	ts := NewTempStorage("")
+
 	// get first block of the loop
-	peerMaxBlock, err := ex.node.SamplePeersBlock("block", peerHeight, peerHash)
+	peerMaxBlock, err := ex.node.RacePeersForValidBlock(peerHash, peerHeight)
 	if err != nil {
 		panic(err)
 	}
 	// we cant store this securely because we dont have a previous block, we should store these in a temp dir and then move them over and validate them
 	fmt.Println(peerMaxBlock)
 
+	err = ts.StoreBlock(peerMaxBlock)
+	if err != nil {
+		panic(err)
+	}
+
 	prev := peerMaxBlock
 	// sync loop
 	for {
-		prev, err := ex.node.SamplePeersBlock("block", int(prev.Height)-1, prev.PreviousBlockHash)
+
+		// do we have previous block?
+		_, found := ex.database.GetBlock(prev.PreviousBlockHash, prev.Height-1)
+		if found {
+			break
+		}
+
+		// get previous block from network
+		prev, err := ex.node.RacePeersForValidBlock(prev.PreviousBlockHash, int(prev.Height)-1)
 		if err != nil {
 			panic(err)
 		}
 
+		ts.StoreBlock(prev)
+
 		fmt.Println(prev)
 	}
+
+	// sync ledger to this block
+	err = ex.database.SyncLedger(prev.Height-1, prev.PreviousBlockHash)
+	if err != nil {
+		panic(err)
+	}
+
+	// move temp blocks over
+
+	lowestHeightToSync := prev.Height
+	for {
+		lowestHash, found := ts.GetFirstBlockByHeight(int(lowestHeightToSync))
+		if !found {
+			break
+		}
+		lowestBlock, bfound := ts.GetBlock(lowestHash, lowestHeightToSync)
+		if !bfound {
+			panic("cooked")
+		}
+
+		err = ex.database.ReceiveBlock(lowestBlock)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	return
 
 }
 
@@ -347,4 +407,56 @@ func (ex *Executor) server_HighestBlock() {
 		}
 
 	}))
+}
+
+type TempStorage struct {
+	base Broombase
+}
+
+func NewTempStorage(dir string) *TempStorage {
+	if dir == "" {
+		dir = "broomtemp"
+	}
+
+	err := os.Remove(dir)
+	if os.IsNotExist(err) {
+		fmt.Println("does not exist, safe to ignore")
+	} else if err != nil {
+		panic(err)
+	}
+
+	err = os.Mkdir(dir, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	return &TempStorage{base: Broombase{
+		mut: sync.RWMutex{},
+		dir: dir,
+	}}
+
+}
+
+func (ts *TempStorage) StoreBlock(block Block) error {
+	return ts.base.StoreBlock(block)
+}
+
+func (ts *TempStorage) GetBlock(hash string, height int64) (Block, bool) {
+	return ts.base.GetBlock(hash, height)
+}
+
+func (ts *TempStorage) DeleteBlock(hash string, height int64) error {
+	ts.base.mut.Lock()
+	defer ts.base.mut.Unlock()
+
+	err := os.Remove(fmt.Sprintf("%s/%d_%s.broom", ts.base.dir, height, hash))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (ts *TempStorage) GetFirstBlockByHeight(height int) (string, bool) {
+	return ts.base.GetFirstBlockByHeight(height)
 }

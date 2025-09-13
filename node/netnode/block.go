@@ -20,7 +20,7 @@ import (
 const COINBASE = "coinbase"
 const MAX_BLOCK_SIZE = 1000
 const STARTING_PAYOUT = 10_000
-const COINBASE_VESTING_BLOCK_NUMBER = 30 // coinbase txns don't go out until a fork is hopefully resolved, these txn amounts are not spendable for this number of blocks
+const COINBASE_VESTING_BLOCK_NUMBER = 10 // coinbase txns don't go out until a fork is hopefully resolved, these txn amounts are not spendable for this number of blocks
 
 type Block struct {
 	Hash string `json:"hash"`

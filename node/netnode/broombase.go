@@ -132,9 +132,16 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 		panic(err)
 	}
 
-	err = bb.SyncLedger(highestBlock, highestBlockHash)
-	if err != nil {
-		panic(err)
+	ledger, found := bb.GetLedgerAt(highestBlockHash, highestBlock)
+	if !found {
+		err = bb.SyncLedger(highestBlock, highestBlockHash)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		fmt.Println("setting ledger")
+		bb.ledger = ledger
+		bb.ledger.mut = &sync.RWMutex{}
 	}
 
 	return bb
@@ -233,6 +240,8 @@ func (bb *Broombase) ValidateBlockHeaders(block *Block) error {
 	return nil
 }
 
+// DOES NOT USE SNAPSHOTS
+// ONLY USED ON GENESIS
 func (bb *Broombase) AddAndSync(block *Block) error {
 
 	err := bb.StoreBlock(*block)
@@ -240,6 +249,7 @@ func (bb *Broombase) AddAndSync(block *Block) error {
 		return err
 	}
 
+	// SLOW HERE
 	if bb.ledger.BlockHeight < block.Height {
 		fmt.Println("syncing ledger")
 		err = bb.SyncLedger(block.Height, block.Hash)
@@ -663,7 +673,6 @@ func (l *Ledger) CheckLedger(address string) (found bool, nonce int64, balance i
 }
 
 // not ledger safe,
-// TODO: add logic to add on really old block > 30 or so old; prevents attacks
 func (bb *Broombase) ReceiveBlock(block Block) error {
 
 	err := bb.ValidateBlockHeaders(&block)
@@ -674,7 +683,25 @@ func (bb *Broombase) ReceiveBlock(block Block) error {
 	// check if it solves current puzzle
 	if bb.ledger.BlockHeight+1 == block.Height && bb.ledger.BlockHash == block.PreviousBlockHash {
 		// this is the next block
-		return bb.AddAndSync(&block)
+
+		err := bb.ledger.ValidateBlock(block)
+		if err != nil {
+			return err
+		}
+		// my current ledger should be up to date
+		bb.ledger.SyncNextBlock(block)
+
+		err = bb.StoreLedger(block.Hash, block.Height)
+		if err != nil {
+			panic("cant store ledger but we already synced")
+		}
+
+		err = bb.StoreBlock(block)
+		if err != nil {
+			panic("cant store block but we already synced and stored ledger")
+		}
+
+		return nil
 	} else {
 		// this block is not the correct puzzle target, we must still reconcile for forks
 		// get the ledger at the previous block value
@@ -709,7 +736,7 @@ func (bb *Broombase) ReceiveBlock(block Block) error {
 	return nil
 }
 
-// used for testing only
+// used for testing only and copied by TempStorage
 func (bb *Broombase) GetFirstBlockByHeight(height int) (string, bool) {
 	bb.mut.RLock()
 	files, err := os.ReadDir(bb.dir)

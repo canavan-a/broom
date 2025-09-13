@@ -8,12 +8,12 @@ import (
 )
 
 func TestExecutor(t *testing.T) {
-	ex := NewExecutor([]string{},
+	ex := NewExecutor(
 		"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==",
 		"hello",
 		"",
 		"",
-		true)
+	)
 
 	ex.RunMiningLoop()
 }
@@ -30,12 +30,12 @@ func TestFork(t *testing.T) {
 		// panic(err)
 	}
 
-	ex := NewExecutor([]string{},
+	ex := NewExecutor(
 		"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW7I9+SUHOW28jjABqnpO76tqwG/nCG/jMMPuUfIQryMPlCdxPwUrSP49ioqYZAf2kXrXQ7MQE891OXBTSpvlsA==",
 		"hello",
 		broombaseDir,
 		ledgerDir,
-		true)
+	)
 
 	go ex.RunMiningLoop()
 

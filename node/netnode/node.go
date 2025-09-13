@@ -32,6 +32,8 @@ const PEER_SAMPLE_SIZE = 30
 
 const EXPOSED_PORT = "8080"
 
+const NO_PEERS_ERROR = "no peers found"
+
 var START_DELIMETER = []byte{0x01, 0x14}
 
 type MessageType string
@@ -474,6 +476,9 @@ func (n *Node) requestPeerHighestBlock(ctx context.Context, ipAddress string) (r
 func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
 
 	sample := n.GetAddressSample()
+	if len(sample) == 0 {
+		return "", 0, errors.New(NO_PEERS_ERROR)
+	}
 
 	wg := sync.WaitGroup{}
 	mut := sync.Mutex{}
@@ -552,7 +557,7 @@ func (n *Node) GetAddressSample() []string {
 	return sample
 }
 
-func (n *Node) RacePeersForValidBlock(hash string, height int, err error) (Block, error) {
+func (n *Node) RacePeersForValidBlock(hash string, height int) (Block, error) {
 
 	ctx := context.Background()
 
