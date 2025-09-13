@@ -138,10 +138,16 @@ func (ex *Executor) RunNetworkSync() (caughtUp bool) {
 		fmt.Println(prev)
 	}
 
-	// sync ledger to this block
-	err = ex.database.SyncLedger(prev.Height-1, prev.PreviousBlockHash)
-	if err != nil {
-		panic(err)
+	ledger, found := ex.database.GetLedgerAt(prev.PreviousBlockHash, prev.Height-1)
+	if !found {
+		err = ex.database.SyncLedger(prev.Height-1, prev.PreviousBlockHash)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		fmt.Println("setting ledger")
+		ex.database.ledger = ledger
+		ex.database.ledger.mut = &sync.RWMutex{}
 	}
 
 	// move temp blocks over
@@ -251,7 +257,7 @@ func (ex *Executor) RunMiningLoop() {
 
 func (ex *Executor) Mine(solutionChan chan Block, doneChan chan struct{}) {
 
-	ex.miningBlock.MineWithWorkers(ex.database.ledger.CalculateNewMiningThreshold(), EXECUTOR_WORKER_COUNT, solutionChan, doneChan)
+	ex.miningBlock.MineWithWorkers(ex.database.ledger.MiningThresholdHash, EXECUTOR_WORKER_COUNT, solutionChan, doneChan)
 }
 
 func (ex *Executor) getAddressTransactions(address string) []Transaction {

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +23,9 @@ const GENESIS_BLOCK_HEIGHT = 0
 const BLOCK_SPEED_AVERAGE_WINDOW = 50
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
+const TARGET_BLOCK_TIME = 3
+const ADJUSTMENT_FACTOR = 4
+
 type Broombase struct {
 	mut       sync.RWMutex
 	dir       string
@@ -34,20 +39,21 @@ type PendingBalance struct {
 	UnlockLevel int64  `json:"unlockLevel"`
 }
 
-type BlockTime struct {
-	Height int64     `json:"height"`
-	Time   time.Time `json:"time"`
+type BlockTimeDifficulty struct {
+	Height     int64     `json:"height"`
+	Time       time.Time `json:"time"`
+	Difficulty string    `json:"difficulty"`
 }
 
 type Ledger struct {
-	mut                 *sync.RWMutex    `json:"-"`
-	MiningThresholdHash string           `json:"miningThreshold"`
-	BlockHeight         int64            `json:"blockHeight"`
-	BlockHash           string           `json:"blockHash"`
-	Balances            map[string]int64 `json:"balances"` // track receiver balances
-	Nonces              map[string]int64 `json:"nonces"`   // track sender nonce values of transactions
-	BlockTime           []BlockTime      `json:"blockTime"`
-	Pending             []PendingBalance `json:"pending"`
+	mut                 *sync.RWMutex         `json:"-"`
+	MiningThresholdHash string                `json:"miningThreshold"`
+	BlockHeight         int64                 `json:"blockHeight"`
+	BlockHash           string                `json:"blockHash"`
+	Balances            map[string]int64      `json:"balances"` // track receiver balances
+	Nonces              map[string]int64      `json:"nonces"`   // track sender nonce values of transactions
+	BlockTimeDifficulty []BlockTimeDifficulty `json:"blockTime"`
+	Pending             []PendingBalance      `json:"pending"`
 }
 
 var GENESIS_HASH = "fd1cb7926a4447454a00a3c5c75126ad8ec053bc5ba61d706ca687428c8af5ac"
@@ -74,7 +80,7 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 			BlockHeight:         0,
 			Balances:            make(map[string]int64),
 			Nonces:              make(map[string]int64),
-			BlockTime:           make([]BlockTime, 0),
+			BlockTimeDifficulty: make([]BlockTimeDifficulty, 0),
 			Pending:             make([]PendingBalance, 0),
 		},
 	}
@@ -581,13 +587,14 @@ func (l *Ledger) Accumulate(b Block) {
 	l.BlockHeight = b.Height
 	l.BlockHash = b.Hash
 
-	// loads the block time array in prep for averaging
-	l._transitionBlockTimeArray(BlockTime{
-		Height: b.Height,
-		Time:   b.GetTimestampTime(),
-	})
+	l.MiningThresholdHash = l._calculateNewMiningThreshold()
 
-	l.MiningThresholdHash = l.CalculateNewMiningThreshold()
+	// loads the block time array in prep for averaging
+	l._transitionBlockTimeArray(BlockTimeDifficulty{
+		Height:     b.Height,
+		Time:       b.GetTimestampTime(),
+		Difficulty: l.MiningThresholdHash,
+	})
 
 	accountTransactions := make(map[string][]Transaction)
 
@@ -634,9 +641,62 @@ func (l *Ledger) Accumulate(b Block) {
 
 }
 
-func (l *Ledger) CalculateNewMiningThreshold() string {
+func (l *Ledger) _calculateNewMiningThreshold() string {
+	if len(l.BlockTimeDifficulty) < 2 {
+		return DEFAULT_MINING_THRESHOLD
+	}
 
-	return DEFAULT_MINING_THRESHOLD
+	// Sort blocks by height
+	sort.Slice(l.BlockTimeDifficulty, func(i, j int) bool {
+		return l.BlockTimeDifficulty[i].Height < l.BlockTimeDifficulty[j].Height
+	})
+
+	var totalActual int64
+	var totalExpected int64
+
+	// Start from index 1 to skip genesis block (height 0)
+	for i := 2; i < len(l.BlockTimeDifficulty); i++ {
+		cur := l.BlockTimeDifficulty[i]
+		prev := l.BlockTimeDifficulty[i-1]
+
+		actual := int64(cur.Time.Sub(prev.Time).Seconds())
+		if actual < 1 {
+			actual = 1
+		}
+
+		totalActual += actual
+		totalExpected += int64(TARGET_BLOCK_TIME)
+	}
+
+	if totalExpected == 0 {
+		return DEFAULT_MINING_THRESHOLD
+	}
+
+	last := l.BlockTimeDifficulty[len(l.BlockTimeDifficulty)-1]
+
+	oldDiff := new(big.Int)
+	oldDiff.SetString(last.Difficulty, 16)
+
+	// Scale difficulty
+	newDiff := new(big.Int).Mul(oldDiff, big.NewInt(totalActual))
+	newDiff.Div(newDiff, big.NewInt(totalExpected))
+
+	// Cap adjustment
+	minDiff := new(big.Int).Div(oldDiff, big.NewInt(ADJUSTMENT_FACTOR))
+	maxDiff := new(big.Int).Mul(oldDiff, big.NewInt(ADJUSTMENT_FACTOR))
+
+	if newDiff.Cmp(minDiff) < 0 {
+		newDiff = minDiff
+	}
+	if newDiff.Cmp(maxDiff) > 0 {
+		newDiff = maxDiff
+	}
+
+	// Ensure fixed 256-bit output
+	mask := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+	newDiff.And(newDiff, mask)
+
+	return fmt.Sprintf("%064x", newDiff)
 }
 
 func (l *Ledger) CalculateCurrentReward() int {
@@ -650,7 +710,7 @@ func (l *Ledger) Clear() {
 	l.Balances = make(map[string]int64)
 	l.Nonces = make(map[string]int64)
 	l.Pending = l.Pending[:0]
-	l.BlockTime = make([]BlockTime, 0)
+	l.BlockTimeDifficulty = make([]BlockTimeDifficulty, 0)
 }
 
 // Pass in a previously validated block, use l.ValidateBlock()
@@ -758,26 +818,18 @@ func (bb *Broombase) GetFirstBlockByHeight(height int) (string, bool) {
 
 }
 
-func (l *Ledger) _transitionBlockTimeArray(bt BlockTime) {
-	if len(l.BlockTime) < BLOCK_SPEED_AVERAGE_WINDOW {
-		l.BlockTime = append(l.BlockTime, bt)
-	} else {
-		minHeight := l.BlockTime[0].Height
-		for _, curBt := range l.BlockTime {
-			if minHeight < curBt.Height {
-				minHeight = curBt.Height
+func (l *Ledger) _transitionBlockTimeArray(bt BlockTimeDifficulty) {
+	l.BlockTimeDifficulty = append(l.BlockTimeDifficulty, bt)
+
+	if len(l.BlockTimeDifficulty) > BLOCK_SPEED_AVERAGE_WINDOW {
+		// find lowest Height
+		minIdx := 0
+		for i, curBt := range l.BlockTimeDifficulty {
+			if curBt.Height < l.BlockTimeDifficulty[minIdx].Height {
+				minIdx = i
 			}
 		}
-
-		newBlockTime := []BlockTime{}
-
-		for _, curBt := range l.BlockTime {
-			if curBt.Height != minHeight {
-				newBlockTime = append(newBlockTime, curBt)
-			}
-		}
-
-		l.BlockTime = newBlockTime
-
+		// remove lowest Height
+		l.BlockTimeDifficulty = append(l.BlockTimeDifficulty[:minIdx], l.BlockTimeDifficulty[minIdx+1:]...)
 	}
 }
