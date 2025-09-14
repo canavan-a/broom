@@ -22,6 +22,9 @@ type Executor struct {
 	note    string
 
 	mux *http.ServeMux
+
+	egressBlockChan chan Block
+	egressTxnChan   chan Transaction
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string) *Executor {
@@ -29,6 +32,9 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	bb := InitBroombaseWithDir(dir, ledgerDir)
 	blockChan := make(chan Block)
 	txnChan := make(chan Transaction)
+
+	egressBlockChan := make(chan Block)
+	egressTxnChan := make(chan Transaction)
 	mempool := make(map[string]Transaction)
 
 	ex := &Executor{
@@ -40,6 +46,9 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 		address: myAddress,
 		note:    miningNote,
+
+		egressBlockChan: egressBlockChan,
+		egressTxnChan:   egressTxnChan,
 	}
 
 	return ex
@@ -47,7 +56,7 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 func (ex *Executor) Start(seeds ...string) {
 
-	ex.node = ActivateNode(seeds...)
+	ex.node = ActivateNode(ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, seeds...)
 
 	fmt.Println("Starting rest server")
 	ex.SetupHttpServer()

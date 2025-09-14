@@ -39,18 +39,23 @@ var START_DELIMETER = []byte{0x01, 0x14}
 type MessageType string
 
 const (
-	Ping            MessageType = "Ping"
-	PeerBroadcast   MessageType = "PeerBroadcast"
-	TransactionSend MessageType = "TransactionSend"
-	BlockMsg        MessageType = "BlockMsg"
-	BlockSolution   MessageType = "BlockSolution"
+	Ping          MessageType = "Ping"
+	PeerBroadcast MessageType = "PeerBroadcast"
+	TxnMsg        MessageType = "TxnMsg"
+	BlockMsg      MessageType = "BlockMsg"
 )
 
 type Message struct {
 	Action MessageType `json:"action"`
 
-	HostNames []string `json:"hostname,omitempty"`
+	HostNames []string `json:"hostnames"`
+
+	Block Block `json:"block"`
+
+	Txn Transaction `json:"txn"`
 }
+
+// TODO: do egress logic
 
 type Node struct {
 	seeds []string
@@ -58,15 +63,25 @@ type Node struct {
 
 	mutex      sync.Mutex
 	msgChannel chan []byte
+
+	ingressBlock chan Block
+	ingressTxn   chan Transaction
+
+	egressBlock chan Block
+	egressTxn   chan Transaction
 }
 
-func ActivateNode(seedNodes ...string) *Node {
+func ActivateNode(ingressBlock, egressBlock chan Block, ingressTxn, egressTxn chan Transaction, seedNodes ...string) *Node {
 
 	node := &Node{
-		seeds:      seedNodes,
-		peers:      make(map[string]*Peer),
-		mutex:      sync.Mutex{},
-		msgChannel: make(chan []byte, 10),
+		seeds:        seedNodes,
+		peers:        make(map[string]*Peer),
+		mutex:        sync.Mutex{},
+		msgChannel:   make(chan []byte, 10),
+		ingressBlock: ingressBlock,
+		ingressTxn:   ingressTxn,
+		egressBlock:  egressBlock,
+		egressTxn:    egressTxn,
 	}
 
 	// seed the supplied node ips
@@ -287,6 +302,12 @@ func (n *Node) processIncomingMessage(rawMsg []byte) {
 		n.BalancePeers(msg.HostNames)
 	case Ping:
 		fmt.Println("pinged")
+	case TxnMsg:
+		n.ingressTxn <- msg.Txn
+		fmt.Println("txnmsg")
+	case BlockMsg:
+		n.ingressBlock <- msg.Block
+		fmt.Println("blkmsg")
 	}
 
 }
