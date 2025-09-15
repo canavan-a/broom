@@ -90,3 +90,37 @@ The flow is as follows, we receive a block. If this block solves the current puz
 ## Executor
 
 The executor runs a loop of mining, then breaks the loop when a new txn or block comes in. This block is added or txn is added to the chain or mining block and mempool respectively. Then mining continues. When a block is found and proven to be valid, we want to make sure the block solves our current solution and clear those txn out of the mempool. When restarting on top of that block we pull in all the remaining mempool txns.
+
+## Network Syncing
+
+The network sync logic is somewhat inefficient because of the argon2 hashrate. The advised method to sync will be to get a snapshot of ledger and block data from a trusted source. I will be posting snapshot tar files of the entire network.
+
+### Sync Mechanics
+
+We run a network sync that will sample the network for the highest block. We trace backwards from this block until we collide witha block we already have. This process is repeated until we agree with the network on highest block. This is because while syncing; the network may have progressed forward.
+
+### Other Sync Points
+
+There is an edge case that exists where the network gets ahead of the current node by over one block. If this is the case we have a missing block. We will have to run a network sync to catch back up. This jumped block must be confirmed by multiple sources to proceed. Otherwise we do not want to waste compute on syncing forward to bad blocks. The plan is; if we get a height jump, sample the network for this block. If it is confirmed, sync off this block.
+
+#### Example
+
+We lost connection, duuring the outage the network got 2 blocks ahead.
+
+`Situation:`
+
+Current block: `33`
+
+Recieved block: `36`
+
+Missing Blocks: `35, 34`
+
+`Solution`
+
+Sample network for block 36, if consensus Sync off this block.
+
+## Egress
+
+The network needs to distribute valid txns and blocks. The default node behavior will be to broadcast valid txns and blocks. This doe snot include txns that have already been added. We verify, add to our own ledger, blockchain, mempool; then we broadcast to our peers the good data.
+
+## Mempool
