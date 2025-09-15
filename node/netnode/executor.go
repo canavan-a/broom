@@ -206,6 +206,10 @@ func (ex *Executor) RunMiningLoop() {
 			if err != nil {
 				fmt.Println("Block invalid: ", err)
 			} else {
+
+				// share the block with the egress
+				ex.egressBlockChan <- block
+
 				// no error
 				if currentSolution {
 					// TODO: smart clear the mempool because we might have valid txns not included in the block
@@ -247,6 +251,9 @@ func (ex *Executor) RunMiningLoop() {
 						// pass: do nothing, txn is not validated
 
 					} else {
+						// egress the txn
+						ex.egressTxnChan <- txn
+
 						// we found a good txn, add it to the mempool
 						ex.mempool[txn.Sig] = txn
 						ex.miningBlock.Add(txn)

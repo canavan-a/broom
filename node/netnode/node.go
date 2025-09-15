@@ -92,6 +92,8 @@ func ActivateNode(ingressBlock, egressBlock chan Block, ingressTxn, egressTxn ch
 
 	node.StartListenIncomingMessages()
 
+	node.RunEgress()
+
 	node.Schedule(node.GossipPeers, time.Minute*5)
 
 	return node
@@ -605,4 +607,39 @@ func (n *Node) RacePeersForValidBlock(hash string, height int) (Block, error) {
 	} else {
 		return Block{}, errors.New("no block found, need to resample")
 	}
+}
+
+func (n *Node) RunEgress() {
+
+	go func() {
+		for {
+			select {
+			case txn := <-n.egressTxn:
+				txnMsg := Message{
+					Action: TxnMsg,
+					Txn:    txn,
+				}
+
+				msg, err := json.Marshal(txnMsg)
+				if err != nil {
+					log.Fatal("peer broadcast: invalid slice")
+				}
+				n.broadcastMessageToPeers(msg)
+
+			case block := <-n.egressBlock:
+				blockMsg := Message{
+					Action: BlockMsg,
+					Block:  block,
+				}
+
+				msg, err := json.Marshal(blockMsg)
+				if err != nil {
+					log.Fatal("peer broadcast: invalid slice")
+				}
+				n.broadcastMessageToPeers(msg)
+
+			}
+		}
+
+	}()
 }
