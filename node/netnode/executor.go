@@ -1,15 +1,22 @@
 package netnode
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
+	"time"
 )
 
 const EXECUTOR_WORKER_COUNT = 4
+const SYNC_CHECK_DURATION = 5 * time.Minute
 
 type Executor struct {
 	mining      bool
@@ -216,14 +223,26 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 	ex.Mine(ctx, ex.blockChan, doneChan, workers)
 	fmt.Println("mining started")
 
+	// every 10 min without a block check up and sync
+	timer := time.NewTimer(SYNC_CHECK_DURATION)
+	defer timer.Stop()
+
 	for {
 
 		select {
 		case <-ctx.Done():
 			return
+		case <-timer.C:
+			// run a network sync every 5 ish minutes
+			fmt.Println("running network sync")
+			ex.NetworkSync(ctx)
+			timer.Reset(SYNC_CHECK_DURATION)
+
+			fmt.Println("sync done")
+
 		case block := <-ex.blockChan:
 
-			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height
+			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height && ex.database.ledger.BlockHash == block.PreviousBlockHash
 
 			// stop mining, handle block validation and storage, start mining again
 			fmt.Println("incoming block (network or self)")
@@ -234,6 +253,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			err := ex.database.ReceiveBlock(block)
 			if err != nil {
 				fmt.Println("Block invalid: ", err)
+
 			} else {
 
 				// share the block with the egress
@@ -241,8 +261,14 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 				// no error
 				if currentSolution {
-					// TODO: smart clear the mempool because we might have valid txns not included in the block
+					// smart clear the mempool because we might have valid txns not included in the block
+					for txnSig := range block.Transactions {
+						delete(ex.mempool, txnSig)
+					}
 					ex.ResetMiningBlock()
+
+					// copy remaining txns in the mempool into the new block
+					maps.Copy(ex.miningBlock.Transactions, ex.mempool)
 				}
 
 			}
@@ -510,4 +536,64 @@ func (ts *TempStorage) DeleteBlock(hash string, height int64) error {
 
 func (ts *TempStorage) GetFirstBlockByHeight(height int) (string, bool) {
 	return ts.base.GetFirstBlockByHeight(height)
+}
+
+func (ex *Executor) RunBackup() error {
+	outFile, err := os.Create("backup.tar.gz")
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	gw := gzip.NewWriter(outFile)
+	defer gw.Close()
+
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	dirs := []string{
+		ex.database.ledgerDir,
+		ex.database.dir,
+	}
+
+	for _, dir := range dirs {
+		err := filepath.Walk(dir, func(file string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			header, err := tar.FileInfoHeader(fi, "")
+			if err != nil {
+				return err
+			}
+
+			relPath, err := filepath.Rel(filepath.Dir(dir), file)
+			if err != nil {
+				return err
+			}
+			header.Name = relPath
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if fi.Mode().IsRegular() {
+				f, err := os.Open(file)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if _, err := io.Copy(tw, f); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -131,7 +131,9 @@ func (cli *Cli) Run() {
 			cli.ex.Start(netnode.EXECUTOR_WORKER_COUNT, cli.config.Seeds...)
 		}
 	case "backup":
+		cli.initExecutor()
 		fmt.Println("backing up")
+		cli.ex.RunBackup()
 	default:
 		fmt.Println("invalid command")
 	}

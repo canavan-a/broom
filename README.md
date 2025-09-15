@@ -101,23 +101,7 @@ We run a network sync that will sample the network for the highest block. We tra
 
 ### Other Sync Points
 
-There is an edge case that exists where the network gets ahead of the current node by over one block. If this is the case we have a missing block. We will have to run a network sync to catch back up. This jumped block must be confirmed by multiple sources to proceed. Otherwise we do not want to waste compute on syncing forward to bad blocks. The plan is; if we get a height jump, sample the network for this block. If it is confirmed, sync off this block.
-
-#### Example
-
-We lost connection, duuring the outage the network got 2 blocks ahead.
-
-`Situation:`
-
-Current block: `33`
-
-Recieved block: `36`
-
-Missing Blocks: `35, 34`
-
-`Solution`
-
-Sample network for block 36, if consensus Sync off this block.
+There is an edge case that exists where the network gets ahead of the current node by over one block. If this is the case we have a missing block. We will have to run a network sync to catch back up. This jumped block must be confirmed by multiple sources to proceed. Otherwise we do not want to waste compute on syncing forward to bad blocks. The plan is; we periodically sync to the network based on a time interval (5 min), this will stop malicious attackers from stopping mining progress.
 
 ## Egress
 
