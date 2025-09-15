@@ -9,9 +9,9 @@ import (
 
 func TestNewWallet(t *testing.T) {
 
-	client := NewClient()
+	wallet := MakeWallet()
 
-	address, privateKey, err := client.NewWallet()
+	address, privateKey, err := wallet.NewKeypair()
 	if err != nil {
 		t.Fatal(err)
 	}

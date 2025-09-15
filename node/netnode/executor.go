@@ -1,6 +1,7 @@
 package netnode
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,9 @@ import (
 const EXECUTOR_WORKER_COUNT = 4
 
 type Executor struct {
+	mining      bool
+	controlChan chan struct{}
+
 	node        *Node
 	database    *Broombase
 	blockChan   chan Block
@@ -38,6 +42,7 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	mempool := make(map[string]Transaction)
 
 	ex := &Executor{
+		controlChan: make(chan struct{}),
 		database:    bb,
 		blockChan:   blockChan,
 		txnChan:     txnChan,
@@ -54,35 +59,47 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	return ex
 }
 
-func (ex *Executor) Start(seeds ...string) {
+func (ex *Executor) Start(workers int, seeds ...string) {
 
 	ex.node = ActivateNode(ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, seeds...)
 
 	fmt.Println("Starting rest server")
 	ex.SetupHttpServer()
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	fmt.Println("Syncing to network")
-	ex.NetworkSync()
+	ex.NetworkSync(ctx)
 
 	fmt.Println("Node running")
-	ex.RunMiningLoop()
+	ex.RunMiningLoop(ctx, workers)
 
+	<-ex.controlChan
+	cancel()
+
+}
+
+func (ex *Executor) Cancel() {
+	ex.controlChan <- struct{}{}
 }
 
 func (ex *Executor) ResetMiningBlock() {
 	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight+1, int64(ex.database.ledger.CalculateCurrentReward()))
 }
 
-func (ex *Executor) NetworkSync() {
+func (ex *Executor) NetworkSync(ctx context.Context) {
 	for {
-		caughtUp := ex.RunNetworkSync()
+		if ctx.Err() != nil {
+			return
+		}
+		caughtUp := ex.RunNetworkSync(ctx)
 		if caughtUp {
 			break
 		}
 	}
 }
 
-func (ex *Executor) RunNetworkSync() (caughtUp bool) {
+func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 	// Get my highest block
 	// Request highest block from peers
 	// Determine algorithm to sync with network
@@ -130,6 +147,10 @@ func (ex *Executor) RunNetworkSync() (caughtUp bool) {
 	// sync loop
 	for {
 
+		if ctx.Err() != nil {
+			return
+		}
+
 		// do we have previous block?
 		_, found := ex.database.GetBlock(prev.PreviousBlockHash, prev.Height-1)
 		if found {
@@ -163,6 +184,9 @@ func (ex *Executor) RunNetworkSync() (caughtUp bool) {
 
 	lowestHeightToSync := prev.Height
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		lowestHash, found := ts.GetFirstBlockByHeight(int(lowestHeightToSync))
 		if !found {
 			break
@@ -182,16 +206,21 @@ func (ex *Executor) RunNetworkSync() (caughtUp bool) {
 
 }
 
-func (ex *Executor) RunMiningLoop() {
+func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
+
+	ex.mining = true
+	defer func() { ex.mining = false }()
 
 	doneChan := make(chan struct{})
 
-	ex.Mine(ex.blockChan, doneChan)
+	ex.Mine(ctx, ex.blockChan, doneChan, workers)
 	fmt.Println("mining started")
 
 	for {
-		fmt.Println("starting new cycle")
+
 		select {
+		case <-ctx.Done():
+			return
 		case block := <-ex.blockChan:
 
 			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height
@@ -219,7 +248,7 @@ func (ex *Executor) RunMiningLoop() {
 			}
 
 			doneChan = make(chan struct{})
-			ex.Mine(ex.blockChan, doneChan)
+			ex.Mine(ctx, ex.blockChan, doneChan, workers)
 		case txn := <-ex.txnChan:
 			// stop mining, add txn to block, handle block validation, start mining again
 			fmt.Println("incoming network txn")
@@ -263,7 +292,7 @@ func (ex *Executor) RunMiningLoop() {
 			}
 
 			doneChan = make(chan struct{})
-			ex.Mine(ex.blockChan, doneChan)
+			ex.Mine(ctx, ex.blockChan, doneChan, workers)
 
 		}
 
@@ -271,9 +300,9 @@ func (ex *Executor) RunMiningLoop() {
 
 }
 
-func (ex *Executor) Mine(solutionChan chan Block, doneChan chan struct{}) {
+func (ex *Executor) Mine(ctx context.Context, solutionChan chan Block, doneChan chan struct{}, workers int) {
 
-	ex.miningBlock.MineWithWorkers(ex.database.ledger.MiningThresholdHash, EXECUTOR_WORKER_COUNT, solutionChan, doneChan)
+	ex.miningBlock.MineWithWorkers(ctx, ex.database.ledger.MiningThresholdHash, workers, solutionChan, doneChan)
 }
 
 func (ex *Executor) getAddressTransactions(address string) []Transaction {

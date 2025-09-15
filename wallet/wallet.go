@@ -10,20 +10,20 @@ import (
 	nodecrypto "github.com/canavan-a/broom/node/crypto"
 )
 
-type Client struct {
+type Wallet struct {
 	NodePool []string
 
 	PrivateKey *ecdsa.PrivateKey
 	PublicKey  *ecdsa.PublicKey
 }
 
-func NewClient(nodes ...string) *Client {
-	return &Client{
+func MakeWallet(nodes ...string) *Wallet {
+	return &Wallet{
 		NodePool: nodes,
 	}
 }
 
-func (c *Client) Init(address, privateKey string) {
+func (w *Wallet) Init(address, privateKey string) {
 
 	pk, err := nodecrypto.ParsePublicKey(address)
 	if err != nil {
@@ -31,19 +31,19 @@ func (c *Client) Init(address, privateKey string) {
 		panic(err)
 	}
 
-	c.PublicKey = pk
+	w.PublicKey = pk
 
 	privD := new(big.Int)
 	privD.SetString(privateKey, 16)
 
-	c.PrivateKey = &ecdsa.PrivateKey{
-		PublicKey: *c.PublicKey,
+	w.PrivateKey = &ecdsa.PrivateKey{
+		PublicKey: *w.PublicKey,
 		D:         privD,
 	}
 }
 
 // creates new wallet and Initializes the client to that value
-func (c *Client) NewWallet() (address string, privateKey string, err error) {
+func (w *Wallet) NewKeypair() (address string, privateKey string, err error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", "", err
@@ -56,7 +56,7 @@ func (c *Client) NewWallet() (address string, privateKey string, err error) {
 
 	privateKey = nodecrypto.GeneratePrivateKeyText(priv)
 
-	c.Init(address, privateKey)
+	w.Init(address, privateKey)
 
 	return
 }

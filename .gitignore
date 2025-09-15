@@ -3,4 +3,8 @@
 **/ledger_test/
 **/ledger/
 
+*.exe
+
 sample.json
+
+*.broom

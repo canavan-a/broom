@@ -2,6 +2,7 @@ package netnode
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"maps"
 	"math/big"
@@ -124,10 +125,13 @@ func (b *Block) RotateMiningValues() (hash string) {
 	return b.Hash
 }
 
-func (b Block) StartSolutionWorker(target string, solutionChan chan Block, done chan struct{}) {
+func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionChan chan Block, done chan struct{}) {
 	fmt.Println("worker started")
 	for {
+
 		select {
+		case <-ctx.Done():
+			return
 		case <-done:
 			return
 		default:
@@ -162,12 +166,12 @@ func (b Block) DeepCopy() Block {
 	return b
 }
 
-func (b *Block) MineWithWorkers(target string, workers int, solutionChan chan Block, done chan struct{}) {
+func (b *Block) MineWithWorkers(ctx context.Context, target string, workers int, solutionChan chan Block, done chan struct{}) {
 
 	go func() {
 		for range workers {
 			bCopy := b.DeepCopy()
-			go bCopy.StartSolutionWorker(target, solutionChan, done)
+			go bCopy.StartSolutionWorker(ctx, target, solutionChan, done)
 		}
 	}()
 }

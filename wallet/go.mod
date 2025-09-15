@@ -1,4 +1,4 @@
-module github.com/canavan-a/broom/client
+module github.com/canavan-a/broom/wallet
 
 go 1.25.0
 
