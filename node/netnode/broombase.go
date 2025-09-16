@@ -23,7 +23,7 @@ const GENESIS_BLOCK_HEIGHT = 0
 const BLOCK_SPEED_AVERAGE_WINDOW = 50
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
-const TARGET_BLOCK_TIME = 3
+const TARGET_BLOCK_TIME = 60
 const ADJUSTMENT_FACTOR = 4
 
 type Broombase struct {
