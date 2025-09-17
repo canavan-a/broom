@@ -30,7 +30,7 @@ const PROTOCOL_MAX_SIZE = 30_000_000
 
 const PEER_SAMPLE_SIZE = 30
 
-const EXPOSED_PORT = "8080"
+const EXPOSED_PORT = "80"
 
 const NO_PEERS_ERROR = "no peers found"
 
@@ -382,7 +382,14 @@ func (n *Node) requestPeerBlock(ctx context.Context, ipAddress string, path stri
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://%s:%s/%s", ipAddress, EXPOSED_PORT, path), bytes.NewReader(payloadData))
+	secureRequest := ""
+
+	host := ipAddress
+	if net.ParseIP(host) == nil {
+		secureRequest = "s"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http%s://%s/%s", secureRequest, ipAddress, path), bytes.NewReader(payloadData))
 	if err != nil {
 		return
 	}
@@ -471,7 +478,14 @@ func (n *Node) SamplePeersBlock(path string, height int, hash string) (consensus
 
 func (n *Node) requestPeerHighestBlock(ctx context.Context, ipAddress string) (response HashHeight, err error) {
 
-	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http://%s:%s/highest_block", ipAddress, EXPOSED_PORT), nil)
+	secureRequest := ""
+
+	host := ipAddress
+	if net.ParseIP(host) == nil {
+		secureRequest = "s"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("http%s://%s/highest_block", secureRequest, ipAddress), nil)
 	if err != nil {
 		return
 	}

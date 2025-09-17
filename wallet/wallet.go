@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,12 +10,18 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"os"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 
 	nodecrypto "github.com/canavan-a/broom/node/crypto"
+	netnode "github.com/canavan-a/broom/node/netnode"
 )
 
 const WALLET_FILENAME = "walletconfig.broom"
@@ -62,11 +69,17 @@ func (w *Wallet) Run() {
 	args := flag.Args()
 
 	switch args[0] {
+	case "init":
+		if !w.AreYouSure("init, this will overwrite existing keys") {
+			return
+		}
+		w.CliInit()
 	case "sync":
 		w.SyncBalance()
 		fmt.Println("balance synced")
 		fmt.Println("Balance: ", float64(w.Balance)/1000.0)
 	case "balance":
+		fmt.Println("Run sync to update network")
 		fmt.Println("Balance: ", float64(w.Balance)/1000.0)
 	case "address":
 		key, err := nodecrypto.GenerateAddress(*w.PublicKey)
@@ -74,19 +87,81 @@ func (w *Wallet) Run() {
 			panic(err)
 		}
 		fmt.Println(key)
-	case "key-rotate":
+	case "send":
+		w.Send()
+		fmt.Println("Send Broom")
+	case "generate-keys":
+		if !w.AreYouSure("generating new keys, this will overwrite existing keys") {
+			return
+		}
 		_, _, err := w.NewKeypair()
 		if err != nil {
 			panic(err)
 		}
 		w.WriteData(Data{})
 		fmt.Println("keys rotated")
-	case "add-seeds":
-		w.Seeds = append(w.Seeds, args[1:]...)
-	case "clear-seeds":
-		w.Seeds = []string{}
+	case "seeds":
+		if len(args) == 1 {
+			fmt.Println("options: add, list, clear")
+			return
+		}
+		switch args[1] {
+		case "add":
+			if len(args) == 2 {
+				fmt.Println("please supply command with addresses/hostnames")
+			}
+
+			for _, seed := range args[2:] {
+				if !slices.Contains(w.Seeds, seed) {
+					w.Seeds = append(w.Seeds, seed)
+				}
+			}
+			w.SaveSeeds()
+			fallthrough
+		case "list":
+			for _, seed := range w.Seeds {
+				fmt.Println(seed)
+			}
+		case "clear":
+			if !w.AreYouSure("clear seeds") {
+				return
+			}
+			w.Seeds = []string{}
+			w.SaveSeeds()
+		default:
+			fmt.Println("invalid command")
+		}
+	case "contact":
+		fmt.Println("Website:")
+		fmt.Println("https://broomledger.com/")
+		fmt.Println("Email:")
+		fmt.Println("info@broomledger.com")
 	default:
 		fmt.Println("invalid command")
+	}
+}
+
+func (w *Wallet) SaveSeeds() {
+	file, err := os.ReadFile(WALLET_FILENAME)
+	if err != nil {
+		panic("could not open file")
+	}
+	var cfg Config
+	err = json.Unmarshal(file, &cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	cfg.Seeds = w.Seeds
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		panic("how did we get here")
+	}
+
+	err = os.WriteFile(WALLET_FILENAME, data, 0644)
+	if err != nil {
+		panic("could not back up seeds")
 	}
 }
 
@@ -163,7 +238,14 @@ func (w *Wallet) CheckSeedBalance(seed, address string) (int64, int64, error) {
 		Nonce   int64 `json:"nonce"`
 	}
 
-	resp, err := http.Post(fmt.Sprintf("http://%s/address", seed), "application/json", bytes.NewReader(data))
+	secureRequest := ""
+
+	host := seed
+	if net.ParseIP(host) == nil {
+		secureRequest = "s"
+	}
+
+	resp, err := http.Post(fmt.Sprintf("http%s://%s/address", secureRequest, seed), "application/json", bytes.NewReader(data))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -290,11 +372,9 @@ func (w *Wallet) WriteConfig(cfg Config) error {
 		return err
 	}
 
-	_, fileErr := os.Open(WALLET_FILENAME)
-	if fileErr == nil {
-
-		if os.Rename(WALLET_FILENAME, fmt.Sprintf("old_%s", WALLET_FILENAME)) != nil {
-			panic("cannot make old filename")
+	if _, err := os.Stat(WALLET_FILENAME); err == nil {
+		if err := os.Rename(WALLET_FILENAME, "old_"+WALLET_FILENAME); err != nil {
+			panic(fmt.Sprintf("cannot rename wallet file: %v", err))
 		}
 	}
 
@@ -318,4 +398,132 @@ func (w *Wallet) WriteData(dat Data) error {
 	}
 
 	return nil
+}
+
+func (w *Wallet) AreYouSure(operation string) bool {
+	fmt.Printf("Are you sure you want to %s?\n", operation)
+	fmt.Println("Y/n")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		line := scanner.Text()
+		if strings.Trim(strings.ToLower(line), " ") == "y" {
+			return true
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading:", err)
+	}
+
+	return false
+}
+
+func (w *Wallet) CliInit() {
+
+	var cfg Config
+
+	fmt.Println("Enter wallet address or public key:")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		line := scanner.Text()
+		cfg.PublicKey = strings.Trim(line, " ")
+		_, err := nodecrypto.ParsePublicKey(cfg.PublicKey)
+		if err != nil {
+			fmt.Println("Invalid public key")
+			return
+		}
+	}
+
+	fmt.Println("Enter private key:")
+	if scanner.Scan() {
+		line := scanner.Text()
+		cfg.PrivateKey = strings.Trim(line, " ")
+		_, err := nodecrypto.ParsePrivateKey(cfg.PrivateKey)
+		if err != nil {
+			fmt.Println("Invalid private key")
+			return
+		}
+	}
+
+	w.WriteConfig(cfg)
+	fmt.Println("New config saved.\n\n Run sync to get current balance.")
+}
+
+func (w *Wallet) Send() {
+
+	var tmpAmt float64
+
+	var txn netnode.Transaction
+
+	pub, err := nodecrypto.GenerateAddress(*w.PublicKey)
+	if err != nil {
+		fmt.Println("onvalid public key")
+		return
+	}
+
+	txn.From = pub
+
+	txn.Nonce = int64(w.Nonce) + 1
+
+	fmt.Println("Enter recipient address:")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		line := strings.Trim(scanner.Text(), " ")
+		txn.To = line
+	}
+
+	for {
+
+		fmt.Println("Enter amount: ")
+		if scanner.Scan() {
+			line := strings.Trim(scanner.Text(), " ")
+
+			amt, err := strconv.ParseFloat(line, 64)
+			if err != nil {
+				fmt.Println("invalid amount")
+				return
+			}
+
+			tmpAmt = amt
+
+			txn.Amount = int64(amt * 1000)
+
+			if txn.Amount > int64(w.Balance) {
+				fmt.Println("Not enough funds.")
+			} else if txn.Amount == 0 {
+				fmt.Println("Cannot send 0")
+			} else {
+				break
+			}
+		}
+	}
+
+	fmt.Println("Enter note: ")
+	if scanner.Scan() {
+		line := strings.Trim(scanner.Text(), " ")
+		txn.Note = line
+	}
+
+	fmt.Println("Preview:")
+	fmt.Println("To: ", txn.To)
+	fmt.Println("Amount: ", tmpAmt)
+	fmt.Println("Note: ", txn.Note)
+
+	if !w.AreYouSure(" send money") {
+		return
+	}
+
+	priv := nodecrypto.GeneratePrivateKeyText(w.PrivateKey)
+
+	txn.Sign(priv)
+
+	if !txn.ValidateSize() {
+		fmt.Println("Txn is too large to send")
+	}
+
+	w.BroadcastTxn(txn)
+
+}
+
+func (w *Wallet) BroadcastTxn(txn netnode.Transaction) {
+	fmt.Println("txn sent")
 }
