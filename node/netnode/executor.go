@@ -106,6 +106,23 @@ func (ex *Executor) NetworkSync(ctx context.Context) {
 	}
 }
 
+func (ex *Executor) NetworkSyncWithTracker(ctx context.Context) (syncRequired bool) {
+
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		caughtUp := ex.RunNetworkSync(ctx)
+		if caughtUp {
+			break
+		}
+		syncRequired = true
+
+	}
+
+	return
+}
+
 func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 	// Get my highest block
 	// Request highest block from peers
@@ -235,7 +252,12 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 		case <-timer.C:
 			// run a network sync every 5 ish minutes
 			fmt.Println("running network sync")
-			ex.NetworkSync(ctx)
+			syncRequired := ex.NetworkSyncWithTracker(ctx)
+			if syncRequired {
+				//clear the mempool, we had to sync and don't know what txns are added or not added
+				ex.mempool = make(map[string]Transaction)
+			}
+
 			timer.Reset(SYNC_CHECK_DURATION)
 
 			fmt.Println("sync done")
