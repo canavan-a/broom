@@ -70,6 +70,18 @@ func (ex *Executor) Start(workers int, seeds ...string) {
 
 	ex.node = ActivateNode(ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, seeds...)
 
+	if len(seeds) != 0 {
+		for {
+			if len(ex.node.GetAddressSample()) != 0 {
+				break
+			}
+			time.Sleep(1 * time.Second)
+			fmt.Println("waiting for at least one peer")
+		}
+	}
+
+	fmt.Println("arbitrary wait for nodes to start")
+
 	fmt.Println("Starting rest server")
 	ex.SetupHttpServer()
 
@@ -178,11 +190,12 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		// do we have previous block?
 		_, found := ex.database.GetBlock(prev.PreviousBlockHash, prev.Height-1)
 		if found {
+			fmt.Println("block already exists in broombase")
 			break
 		}
 
 		// get previous block from network
-		prev, err := ex.node.RacePeersForValidBlock(prev.PreviousBlockHash, int(prev.Height)-1)
+		prev, err = ex.node.RacePeersForValidBlock(prev.PreviousBlockHash, int(prev.Height)-1)
 		if err != nil {
 			panic(err)
 		}
@@ -194,10 +207,11 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 
 	ledger, found := ex.database.GetLedgerAt(prev.PreviousBlockHash, prev.Height-1)
 	if !found {
-		err = ex.database.SyncLedger(prev.Height-1, prev.PreviousBlockHash)
-		if err != nil {
-			panic(err)
-		}
+		panic("ledger should exist")
+		// err = ex.database.SyncLedger(prev.Height, prev.Hash)
+		// if err != nil {
+		// 	fmt.Println("error on sync", err)
+		// }
 	} else {
 		fmt.Println("setting ledger")
 		ex.database.ledger = ledger
@@ -215,6 +229,8 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		if !found {
 			break
 		}
+		fmt.Println("first block by height", lowestHash)
+
 		lowestBlock, bfound := ts.GetBlock(lowestHash, lowestHeightToSync)
 		if !bfound {
 			panic("cooked")
@@ -224,6 +240,8 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		if err != nil {
 			panic(err)
 		}
+		lowestHeightToSync++
+
 	}
 
 	return

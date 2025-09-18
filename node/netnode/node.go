@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -365,7 +366,7 @@ func (n *Node) DropRandomPeer() bool {
 	return false
 }
 
-func (n *Node) requestPeerBlock(ctx context.Context, ipAddress string, path string, height int, hash string) (response Block, err error) {
+func (n *Node) requestPeerBlock(ctx context.Context, ipAddress string, path string, height int, hash string) (Block, error) {
 
 	type Payload struct {
 		Height int    `json:"height"`
@@ -379,7 +380,7 @@ func (n *Node) requestPeerBlock(ctx context.Context, ipAddress string, path stri
 
 	payloadData, err := json.Marshal(p)
 	if err != nil {
-		return
+		return Block{}, err
 	}
 
 	secureRequest := ""
@@ -391,29 +392,43 @@ func (n *Node) requestPeerBlock(ctx context.Context, ipAddress string, path stri
 
 	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http%s://%s/%s", secureRequest, ipAddress, path), bytes.NewReader(payloadData))
 	if err != nil {
-		return
+		return Block{}, err
 	}
+
+	fmt.Println("request made ")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return
+		return Block{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		err = errors.New("bad request")
-		return
+		return Block{}, err
 
 	}
 
 	var block Block
 
-	err = json.NewDecoder(resp.Body).Decode(&block)
-	if err != nil {
-		return
+	bodyBytes, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		err = readErr
+		return Block{}, err
 	}
 
-	return
+	fmt.Println("body read")
+
+	err = json.Unmarshal(bodyBytes, &block)
+	if err != nil {
+		fmt.Println("Failed to decode JSON. Response was:")
+		fmt.Println(string(bodyBytes))
+		return Block{}, err
+	}
+
+	fmt.Println("block here: ", block)
+
+	return block, nil
 }
 
 func (n *Node) SamplePeersBlock(path string, height int, hash string) (consensus Block, err error) {
@@ -512,10 +527,13 @@ func (n *Node) requestPeerHighestBlock(ctx context.Context, ipAddress string) (r
 
 func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
 
+	fmt.Println("starting peer sample")
 	sample := n.GetAddressSample()
 	if len(sample) == 0 {
 		return "", 0, errors.New(NO_PEERS_ERROR)
 	}
+
+	fmt.Println("peer sample", sample)
 
 	wg := sync.WaitGroup{}
 	mut := sync.Mutex{}
@@ -595,7 +613,7 @@ func (n *Node) GetAddressSample() []string {
 }
 
 func (n *Node) RacePeersForValidBlock(hash string, height int) (Block, error) {
-
+	fmt.Println("racing peers")
 	ctx := context.Background()
 
 	var block Block
@@ -603,16 +621,25 @@ func (n *Node) RacePeersForValidBlock(hash string, height int) (Block, error) {
 
 	sample := n.GetAddressSample()
 	for _, address := range sample {
+		fmt.Println("requestingblock from: ", address)
+		fmt.Println("height", height)
+		fmt.Println("hash", hash)
 		// we cant "race" because our CPU would go nuts hashing argons
-		foundBlock, err := n.requestPeerBlock(ctx, address, "block", height, hash)
+		foundBlock, err := n.requestPeerBlock(ctx, address, "block_get", height, hash)
 		if err == nil {
-			serialized := block.Serialize()
+
+			fmt.Println("Block found")
+			fmt.Println(foundBlock)
+
+			serialized := foundBlock.Serialize()
 			if crypto.Hash(serialized) == hash {
 				block = foundBlock
 				found = true
 				break
 			}
 		}
+
+		fmt.Println("block find err", err)
 
 	}
 
