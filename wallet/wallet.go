@@ -528,9 +528,26 @@ func (w *Wallet) Send() {
 func (w *Wallet) BroadcastTxns(txn netnode.Transaction) {
 	fmt.Println("txn sent")
 
+	wg := sync.WaitGroup{}
+
 	for _, address := range w.Seeds {
-		w.BroadcastTxn(address, txn)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := w.BroadcastTxn(address, txn)
+			if err == nil {
+				fmt.Printf("Txn broadcast to seed: %s", address)
+			} else {
+				fmt.Printf("Txn broadcast error on: %s", address)
+			}
+
+		}()
+
 	}
+
+	wg.Wait()
+
+	fmt.Println("Txn broadcase complete")
 }
 
 func (w *Wallet) BroadcastTxn(address string, txn netnode.Transaction) error {
