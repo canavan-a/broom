@@ -367,17 +367,19 @@ func (ex *Executor) getAddressTransactions(address string) []Transaction {
 }
 
 func (ex *Executor) SetupHttpServer() {
+	ex.mux = http.NewServeMux()
+	ex.server_GetBlock()
+	ex.server_GetAddressDetails()
+	ex.server_PostTransaction()
+	ex.server_PostBlock()
+	ex.server_HighestBlock()
+
 	go func() {
-		ex.mux = http.NewServeMux()
-		ex.server_GetBlock() // actually post still
-		ex.server_GetAddressDetails()
-		ex.server_PostTransaction()
-		ex.server_PostBlock() // receives a block
-		ex.server_HighestBlock()
-
-		http.ListenAndServe(fmt.Sprintf(":%s", EXPOSED_PORT), ex.mux)
+		fmt.Println("Starting HTTP server on port", EXPOSED_PORT)
+		if err := http.ListenAndServe(":"+EXPOSED_PORT, ex.mux); err != nil {
+			fmt.Println("HTTP server failed:", err)
+		}
 	}()
-
 }
 
 type HashHeight struct {
