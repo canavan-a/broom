@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -520,10 +521,41 @@ func (w *Wallet) Send() {
 		fmt.Println("Txn is too large to send")
 	}
 
-	w.BroadcastTxn(txn)
+	w.BroadcastTxns(txn)
 
 }
 
-func (w *Wallet) BroadcastTxn(txn netnode.Transaction) {
+func (w *Wallet) BroadcastTxns(txn netnode.Transaction) {
 	fmt.Println("txn sent")
+
+	for _, address := range w.Seeds {
+		w.BroadcastTxn(address, txn)
+	}
+}
+
+func (w *Wallet) BroadcastTxn(address string, txn netnode.Transaction) error {
+	secureRequest := ""
+
+	host := address
+	if net.ParseIP(host) == nil {
+		secureRequest = "s"
+	}
+
+	// transaction
+
+	data, err := json.Marshal(txn)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(fmt.Sprintf("http%s://%s/address", secureRequest, address), "application/json", bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode >= 300 {
+		return errors.New("bad request")
+	}
+
+	return nil
 }
