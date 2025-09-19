@@ -279,7 +279,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			timer.Reset(SYNC_CHECK_DURATION)
 
 			fmt.Println("sync done")
-
+			ex.blockChan <- Block{} // send dead block to start mining again
 		case block := <-ex.blockChan:
 
 			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height && ex.database.ledger.BlockHash == block.PreviousBlockHash
@@ -538,6 +538,10 @@ func NewTempStorage(dir string) *TempStorage {
 	}
 
 	err := os.Remove(dir)
+	if err != nil {
+		fmt.Println("could not remove dir")
+	}
+
 	if os.IsNotExist(err) {
 		fmt.Println("does not exist, safe to ignore")
 	} else if err != nil {
