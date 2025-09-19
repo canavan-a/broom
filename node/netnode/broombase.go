@@ -23,7 +23,7 @@ const GENESIS_BLOCK_HEIGHT = 0
 const BLOCK_SPEED_AVERAGE_WINDOW = 50
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
-const TARGET_BLOCK_TIME = 60
+const TARGET_BLOCK_TIME = 15
 const ADJUSTMENT_FACTOR = 4
 
 type Broombase struct {
@@ -692,7 +692,7 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 	oldDiff.SetString(last.Difficulty, 16)
 
 	r := new(big.Rat).SetFrac(oldDiff, big.NewInt(1))
-	r.Mul(r, new(big.Rat).SetFrac(big.NewInt(totalActual), big.NewInt(totalExpected)))
+	r.Mul(r, new(big.Rat).SetFrac(big.NewInt(totalExpected), big.NewInt(totalActual)))
 
 	newDiff := new(big.Int)
 	newDiff.Quo(r.Num(), r.Denom())

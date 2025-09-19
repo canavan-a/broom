@@ -16,7 +16,7 @@ import (
 )
 
 const EXECUTOR_WORKER_COUNT = 4
-const SYNC_CHECK_DURATION = 5 * time.Minute
+const SYNC_CHECK_DURATION = 2 * time.Minute
 
 type Executor struct {
 	mining      bool
@@ -281,7 +281,9 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			doneChan = make(chan struct{})
 
 			fmt.Println("sync done")
-			ex.blockChan <- Block{} // send dead block to start mining again
+			ex.Mine(ctx, ex.blockChan, doneChan, workers)
+
+			// send dead block to start mining again
 		case block := <-ex.blockChan:
 
 			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height && ex.database.ledger.BlockHash == block.PreviousBlockHash
