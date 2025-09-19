@@ -386,6 +386,7 @@ func (ex *Executor) getAddressTransactions(address string) []Transaction {
 
 func (ex *Executor) SetupHttpServer() {
 	ex.mux = http.NewServeMux()
+	ex.server_Root()
 	ex.server_GetBlock()
 	ex.server_GetAddressDetails()
 	ex.server_PostTransaction()
@@ -398,6 +399,12 @@ func (ex *Executor) SetupHttpServer() {
 			fmt.Println("HTTP server failed:", err)
 		}
 	}()
+}
+
+func (ex *Executor) server_Root() {
+	ex.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("I am a node. Please add me to your seed list :)"))
+	}))
 }
 
 type HashHeight struct {
