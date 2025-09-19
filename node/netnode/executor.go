@@ -101,7 +101,24 @@ func (ex *Executor) Cancel() {
 }
 
 func (ex *Executor) ResetMiningBlock() {
-	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight+1, int64(ex.database.ledger.CalculateCurrentReward()))
+
+	// try to mine off highest block
+
+	height, hash, err := ex.database.getHighestBlock()
+	if err != nil {
+		panic("could not find highest block")
+	}
+
+	ledger, found := ex.database.GetLedgerAt(hash, height)
+	if !found {
+		panic("no ledger found for highest block")
+	}
+
+	ledger.mut = &sync.RWMutex{}
+
+	ex.database.ledger = ledger
+
+	ex.miningBlock = NewBlock(ex.address, ex.note, hash, height+1, int64(ex.database.ledger.CalculateCurrentReward()))
 }
 
 func (ex *Executor) NetworkSync(ctx context.Context) {

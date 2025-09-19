@@ -22,7 +22,7 @@ const GENESIS_BLOCK_HEIGHT = 0
 const BLOCK_SPEED_AVERAGE_WINDOW = 50
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
-const TARGET_BLOCK_TIME = 15
+const TARGET_BLOCK_TIME = 60
 const ALPHA_FACTOR = 4
 
 type Broombase struct {
@@ -642,6 +642,7 @@ func (l *Ledger) Accumulate(b Block) {
 
 func (l *Ledger) _calculateNewMiningThreshold() string {
 	if len(l.BlockTimeDifficulty) < 4 {
+		fmt.Println("using default threshold")
 		return DEFAULT_MINING_THRESHOLD
 	}
 
