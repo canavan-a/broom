@@ -679,7 +679,7 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 
 	// Use rational to prevent integer underflow/overflow
 	r := new(big.Rat).SetFrac(oldDiff, big.NewInt(1))
-	r.Mul(r, new(big.Rat).SetFrac(big.NewInt(totalExpected), big.NewInt(totalActual)))
+	r.Mul(r, new(big.Rat).SetFrac(big.NewInt(totalActual), big.NewInt(totalExpected)))
 
 	// Convert back to integer safely
 	newDiff := new(big.Int)
