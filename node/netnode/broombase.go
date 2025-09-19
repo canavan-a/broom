@@ -641,7 +641,7 @@ func (l *Ledger) Accumulate(b Block) {
 }
 
 func (l *Ledger) _calculateNewMiningThreshold() string {
-	if len(l.BlockTimeDifficulty) < 2 {
+	if len(l.BlockTimeDifficulty) < 4 {
 		return DEFAULT_MINING_THRESHOLD
 	}
 
