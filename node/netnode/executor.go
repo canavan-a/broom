@@ -104,21 +104,21 @@ func (ex *Executor) ResetMiningBlock() {
 
 	// try to mine off highest block
 
-	height, hash, err := ex.database.getHighestBlock()
-	if err != nil {
-		panic("could not find highest block")
-	}
+	// height, hash, err := ex.database.getHighestBlock()
+	// if err != nil {
+	// 	panic("could not find highest block")
+	// }
 
-	ledger, found := ex.database.GetLedgerAt(hash, height)
-	if !found {
-		panic("no ledger found for highest block")
-	}
+	// ledger, found := ex.database.GetLedgerAt(hash, height)
+	// if !found {
+	// 	panic("no ledger found for highest block")
+	// }
 
-	ledger.mut = &sync.RWMutex{}
+	// ledger.mut = &sync.RWMutex{}
 
-	ex.database.ledger = ledger
+	// ex.database.ledger = ledger
 
-	ex.miningBlock = NewBlock(ex.address, ex.note, hash, height+1, int64(ex.database.ledger.CalculateCurrentReward()))
+	ex.miningBlock = NewBlock(ex.address, ex.note, ex.miningBlock.Hash, ex.miningBlock.Height+1, int64(ex.database.ledger.CalculateCurrentReward()))
 }
 
 func (ex *Executor) NetworkSync(ctx context.Context) {
@@ -326,6 +326,8 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 					for txnSig := range block.Transactions {
 						delete(ex.mempool, txnSig)
 					}
+					// if this skips and syncs forward we may have txns we try to put in that are already in the chain
+
 					ex.ResetMiningBlock()
 
 					// copy remaining txns in the mempool into the new block
