@@ -654,14 +654,28 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 	var totalActual int64
 	var totalExpected int64
 
-	// Start from index 1 to skip genesis block (height 0)
-	for i := 1; i < len(l.BlockTimeDifficulty); i++ {
+	for i := 0; i < len(l.BlockTimeDifficulty); i++ {
 		cur := l.BlockTimeDifficulty[i]
+
+		// Skip genesis block
+		if cur.Height == 0 {
+			continue
+		}
+
 		prev := l.BlockTimeDifficulty[i-1]
 
+		// Ensure prev is not genesis
+		if prev.Height == 0 && i > 1 {
+			prev = l.BlockTimeDifficulty[i-2]
+		}
+
 		actual := int64(cur.Time.Sub(prev.Time).Seconds())
+
+		// Cap extreme values
 		if actual < 1 {
 			actual = 1
+		} else if actual > TARGET_BLOCK_TIME*10 {
+			actual = TARGET_BLOCK_TIME * 10
 		}
 
 		totalActual += actual
@@ -677,11 +691,9 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 	oldDiff := new(big.Int)
 	oldDiff.SetString(last.Difficulty, 16)
 
-	// Use rational to prevent integer underflow/overflow
 	r := new(big.Rat).SetFrac(oldDiff, big.NewInt(1))
 	r.Mul(r, new(big.Rat).SetFrac(big.NewInt(totalActual), big.NewInt(totalExpected)))
 
-	// Convert back to integer safely
 	newDiff := new(big.Int)
 	newDiff.Quo(r.Num(), r.Denom())
 
@@ -696,7 +708,7 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 		newDiff.Set(maxDiff)
 	}
 
-	// Ensure fixed 256-bit output
+	// Ensure 256-bit output
 	mask := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
 	newDiff.And(newDiff, mask)
 
