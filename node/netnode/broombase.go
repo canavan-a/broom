@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,7 +23,7 @@ const BLOCK_SPEED_AVERAGE_WINDOW = 50
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 const TARGET_BLOCK_TIME = 15
-const ADJUSTMENT_FACTOR = 4
+const ALPHA_FACTOR = 4
 
 type Broombase struct {
 	mut       sync.RWMutex
@@ -646,73 +645,78 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 		return DEFAULT_MINING_THRESHOLD
 	}
 
-	// Sort blocks by height
-	sort.Slice(l.BlockTimeDifficulty, func(i, j int) bool {
-		return l.BlockTimeDifficulty[i].Height < l.BlockTimeDifficulty[j].Height
-	})
-
-	var totalActual int64
-	var totalExpected int64
-
-	for i := 0; i < len(l.BlockTimeDifficulty); i++ {
-		cur := l.BlockTimeDifficulty[i]
-
-		// Skip genesis block
-		if cur.Height == 0 {
-			continue
+	tracker := make(map[int64]BlockTimeDifficulty)
+	for _, btd := range l.BlockTimeDifficulty {
+		if btd.Height != 0 {
+			tracker[btd.Height] = btd
 		}
+	}
 
-		prev := l.BlockTimeDifficulty[i-1]
+	gaps := []int{}
+	bigs := []big.Int{}
 
-		// Ensure prev is not genesis
-		if prev.Height == 0 && i > 1 {
-			prev = l.BlockTimeDifficulty[i-2]
+	for _, diff := range l.BlockTimeDifficulty {
+
+		_, found := tracker[diff.Height-1]
+		if found {
+			num := new(big.Int)
+			num.SetString(diff.Difficulty, 16)
+
+			bigs = append(bigs, *num)
+
+			gap := diff.Time.Sub(tracker[diff.Height-1].Time).Seconds()
+			gaps = append(gaps, int(gap))
 		}
+	}
 
-		actual := int64(cur.Time.Sub(prev.Time).Seconds())
+	sum := 0
+	for _, gap := range gaps {
+		sum += gap
+	}
 
-		// Cap extreme values
-		if actual < 1 {
-			actual = 1
-		} else if actual > TARGET_BLOCK_TIME*10 {
-			actual = TARGET_BLOCK_TIME * 10
+	bigSum := big.NewInt(0)
+	for i := range bigs {
+		bigSum.Add(bigSum, &bigs[i])
+	}
+
+	average := sum / len(gaps)
+	bigAverage := bigSum.Div(bigSum, big.NewInt(int64(len(bigs))))
+
+	if average == TARGET_BLOCK_TIME {
+		return fmt.Sprintf("%064x", bigAverage)
+	}
+
+	oldDifficultyString := ""
+	highestHeight := 0
+
+	for _, d := range l.BlockTimeDifficulty {
+		if d.Height > int64(highestHeight) {
+			highestHeight = int(d.Height)
+			oldDifficultyString = d.Difficulty
 		}
-
-		totalActual += actual
-		totalExpected += int64(TARGET_BLOCK_TIME)
 	}
 
-	if totalExpected == 0 {
-		return DEFAULT_MINING_THRESHOLD
-	}
+	oldDifficulty := new(big.Int)
+	oldDifficulty.SetString(oldDifficultyString, 16)
 
-	last := l.BlockTimeDifficulty[len(l.BlockTimeDifficulty)-1]
+	alpha := big.NewRat(1, ALPHA_FACTOR)
 
-	oldDiff := new(big.Int)
-	oldDiff.SetString(last.Difficulty, 16)
+	difference := big.NewInt(int64(average - TARGET_BLOCK_TIME))
 
-	r := new(big.Rat).SetFrac(oldDiff, big.NewInt(1))
-	r.Mul(r, new(big.Rat).SetFrac(big.NewInt(totalExpected), big.NewInt(totalActual)))
+	ratio := new(big.Rat).SetFrac(difference, big.NewInt(TARGET_BLOCK_TIME))
 
-	newDiff := new(big.Int)
-	newDiff.Quo(r.Num(), r.Denom())
+	alphaProduct := new(big.Rat).Mul(alpha, ratio)
 
-	// Cap adjustment
-	minDiff := new(big.Int).Div(oldDiff, big.NewInt(ADJUSTMENT_FACTOR))
-	maxDiff := new(big.Int).Mul(oldDiff, big.NewInt(ADJUSTMENT_FACTOR))
+	one := big.NewRat(1, 1)
 
-	if newDiff.Cmp(minDiff) < 0 {
-		newDiff.Set(minDiff)
-	}
-	if newDiff.Cmp(maxDiff) > 0 {
-		newDiff.Set(maxDiff)
-	}
+	alphaProductP1 := new(big.Rat).Add(one, alphaProduct)
 
-	// Ensure 256-bit output
-	mask := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
-	newDiff.And(newDiff, mask)
+	oldDiffRat := new(big.Rat).SetInt(oldDifficulty) // oldDiff is *big.Int
+	newDiffRat := new(big.Rat).Mul(oldDiffRat, alphaProductP1)
 
-	return fmt.Sprintf("%064x", newDiff)
+	newDiffInt := new(big.Int).Div(newDiffRat.Num(), newDiffRat.Denom())
+
+	return fmt.Sprintf("%064x", newDiffInt)
 }
 
 func (l *Ledger) GetCurrentMiningThreshold() string {

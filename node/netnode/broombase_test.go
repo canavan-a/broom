@@ -236,3 +236,53 @@ func TestSignTransaction(t *testing.T) {
 // How do we validate the block? without syncing?
 
 //
+
+func TestAdjustMiningDiff(t *testing.T) {
+	ledger := &Ledger{
+		BlockTimeDifficulty: []BlockTimeDifficulty{
+			{
+				Height:     0,
+				Time:       parseTime("2001-11-10T19:00:00-05:00"),
+				Difficulty: "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			},
+			{
+				Height:     1,
+				Time:       parseTime("2025-09-19T14:46:26-04:00"),
+				Difficulty: "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			},
+			{
+				Height:     2,
+				Time:       parseTime("2025-09-19T14:46:28-04:00"),
+				Difficulty: "03ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			},
+			{
+				Height:     3,
+				Time:       parseTime("2025-09-19T14:46:49-04:00"),
+				Difficulty: "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			},
+			{
+				Height:     4,
+				Time:       parseTime("2025-09-19T14:47:35-04:00"),
+				Difficulty: "004296efb8f899e55d39b602f5a4411c1d986a8b1927f4296efb8f899e55d39b",
+			},
+			{
+				Height:     5,
+				Time:       parseTime("2025-09-19T14:50:25-04:00"),
+				Difficulty: "00123e64bef373ce9ecd2e5bfd297e8cf692f69d578cb31ce2ca2e56ccb1d0c4",
+			},
+			// {
+			// 	Height:     6,
+			// 	Time:       parseTime("2025-09-19T15:01:24-04:00"),
+			// 	Difficulty: "00048f992fbcdcf3a7b34b96ff4a5fa33da4bda755e32cc738b28b95b32c7431",
+			// },
+		},
+	}
+
+	thresh := ledger._calculateNewMiningThreshold()
+	fmt.Println(thresh)
+}
+
+func parseTime(s string) time.Time {
+	t, _ := time.Parse(time.RFC3339, s)
+	return t
+}
