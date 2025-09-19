@@ -699,6 +699,15 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 	return fmt.Sprintf("%064x", newDiff)
 }
 
+func (l *Ledger) GetCurrentMiningThreshold() string {
+	l.mut.RLock()
+	defer l.mut.RUnlock()
+
+	thresh := l.MiningThresholdHash
+
+	return thresh
+}
+
 func (l *Ledger) CalculateCurrentReward() int {
 	return STARTING_PAYOUT
 }

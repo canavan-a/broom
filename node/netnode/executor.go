@@ -80,8 +80,6 @@ func (ex *Executor) Start(workers int, seeds ...string) {
 		}
 	}
 
-	fmt.Println("arbitrary wait for nodes to start")
-
 	fmt.Println("Starting rest server")
 	ex.SetupHttpServer()
 
@@ -113,6 +111,7 @@ func (ex *Executor) NetworkSync(ctx context.Context) {
 		}
 		caughtUp := ex.RunNetworkSync(ctx)
 		if caughtUp {
+			fmt.Println("caught up to network")
 			break
 		}
 	}
@@ -161,6 +160,7 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 
 	if height == int64(peerHeight) {
 		// we are synced to the chain
+		fmt.Println("peer heights match ")
 		return true
 	}
 
@@ -268,6 +268,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
+			doneChan <- struct{}{}
 			// run a network sync every 5 ish minutes
 			fmt.Println("running network sync")
 			syncRequired := ex.NetworkSyncWithTracker(ctx)
@@ -402,6 +403,13 @@ func (ex *Executor) SetupHttpServer() {
 }
 
 func (ex *Executor) server_Root() {
+	ex.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("I am a node. Please add me to your seed list :)"))
+	}))
+}
+
+func (ex *Executor) server_Difficulty() {
+	ex.database.ledger._calculateNewMiningThreshold()
 	ex.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("I am a node. Please add me to your seed list :)"))
 	}))

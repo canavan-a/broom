@@ -136,6 +136,7 @@ func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionC
 			return
 		default:
 			b.RotateMiningValues()
+			fmt.Println("Attempt: ", b.Hash)
 			if CompareHash(b.Hash, target) {
 				select {
 				case solutionChan <- b:
@@ -167,7 +168,7 @@ func (b Block) DeepCopy() Block {
 }
 
 func (b *Block) MineWithWorkers(ctx context.Context, target string, workers int, solutionChan chan Block, done chan struct{}) {
-
+	fmt.Println("mining for target: ", target)
 	go func() {
 		for range workers {
 			bCopy := b.DeepCopy()
