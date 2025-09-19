@@ -23,6 +23,12 @@ const MAX_BLOCK_SIZE = 1000
 const STARTING_PAYOUT = 10_000
 const COINBASE_VESTING_BLOCK_NUMBER = 10 // coinbase txns don't go out until a fork is hopefully resolved, these txn amounts are not spendable for this number of blocks
 
+const (
+	THRESHOLD_A = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	THRESHOLD_B = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	THRESHOLD_C = "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+)
+
 type Block struct {
 	Hash string `json:"hash"`
 
@@ -136,13 +142,19 @@ func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionC
 			return
 		default:
 			b.RotateMiningValues()
-			fmt.Println("Attempt: ", b.Hash)
+
 			if CompareHash(b.Hash, target) {
 				select {
 				case solutionChan <- b:
 				case <-done:
 				}
 				return
+			} else if CompareHash(b.Hash, THRESHOLD_C) {
+				fmt.Println("\033[32mTARGET C:\033[0m", b.Hash) // green
+			} else if CompareHash(b.Hash, THRESHOLD_B) {
+				fmt.Println("\033[33mTARGET B:\033[0m", b.Hash) // yellow
+			} else if CompareHash(b.Hash, THRESHOLD_A) {
+				fmt.Println("\033[31mTARGET A:\033[0m", b.Hash) // red
 			}
 		}
 	}

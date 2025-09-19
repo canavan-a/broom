@@ -268,7 +268,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			doneChan <- struct{}{}
+			close(doneChan)
 			// run a network sync every 5 ish minutes
 			fmt.Println("running network sync")
 			syncRequired := ex.NetworkSyncWithTracker(ctx)
@@ -278,6 +278,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			}
 
 			timer.Reset(SYNC_CHECK_DURATION)
+			doneChan = make(chan struct{})
 
 			fmt.Println("sync done")
 			ex.blockChan <- Block{} // send dead block to start mining again
@@ -388,6 +389,7 @@ func (ex *Executor) getAddressTransactions(address string) []Transaction {
 func (ex *Executor) SetupHttpServer() {
 	ex.mux = http.NewServeMux()
 	ex.server_Root()
+	ex.server_Difficulty()
 	ex.server_GetBlock()
 	ex.server_GetAddressDetails()
 	ex.server_PostTransaction()
@@ -409,9 +411,9 @@ func (ex *Executor) server_Root() {
 }
 
 func (ex *Executor) server_Difficulty() {
-	ex.database.ledger._calculateNewMiningThreshold()
-	ex.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("I am a node. Please add me to your seed list :)"))
+	thresh := ex.database.ledger.GetCurrentMiningThreshold()
+	ex.mux.Handle("/difficulty", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(thresh))
 	}))
 }
 
@@ -552,7 +554,7 @@ func NewTempStorage(dir string) *TempStorage {
 		dir = "broomtemp"
 	}
 
-	err := os.Remove(dir)
+	err := os.RemoveAll(dir)
 	if err != nil {
 		fmt.Println("could not remove dir")
 	}
