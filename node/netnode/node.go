@@ -249,8 +249,10 @@ func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
 	for _, peer := range n.requestPeers {
 		err := peer.SendMsg(rawMsg)
 		if err != nil {
+			fmt.Println("send strike, could not send msg to peer")
 			peer.strikes += 1
 		} else {
+			fmt.Println("sent message to peer :)")
 			peer.strikes -= 1
 		}
 
