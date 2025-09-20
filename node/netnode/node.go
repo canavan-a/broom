@@ -608,8 +608,8 @@ func (n *Node) GetAddressSample() []string {
 	n.mutex.Lock()
 	// // sample for n peer's addresses
 	var allAddresses []string
-	for _, peer := range n.peers {
-		allAddresses = append(allAddresses, peer.address)
+	for _, peer := range n.requestPeers {
+		allAddresses = append(allAddresses, peer.ip)
 	}
 	n.mutex.Unlock()
 

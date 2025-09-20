@@ -126,7 +126,10 @@ func (ex *Executor) ResetMiningBlock() {
 
 	// ex.database.ledger = ledger
 
-	ex.miningBlock = NewBlock(ex.address, ex.note, ex.miningBlock.Hash, ex.miningBlock.Height+1, int64(ex.database.ledger.CalculateCurrentReward()))
+	fmt.Println("Resetting mining block")
+	fmt.Println("block hash: ", ex.miningBlock.Hash)
+
+	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight+1, int64(ex.database.ledger.CalculateCurrentReward()))
 }
 
 func (ex *Executor) NetworkSync(ctx context.Context) {
@@ -330,6 +333,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 				// no error
 				if currentSolution {
+					fmt.Println("block is current ledger solution")
 					// smart clear the mempool because we might have valid txns not included in the block
 					for txnSig := range block.Transactions {
 						delete(ex.mempool, txnSig)
