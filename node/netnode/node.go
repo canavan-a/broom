@@ -90,6 +90,7 @@ func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, 
 		ingressTxn:   ingressTxn,
 		egressBlock:  egressBlock,
 		egressTxn:    egressTxn,
+		requestPeers: make(map[string]*RequestPeer),
 	}
 
 	// seed the supplied node ips
