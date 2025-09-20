@@ -22,8 +22,11 @@ type Executor struct {
 	mining      bool
 	controlChan chan struct{}
 
-	node        *Node
-	database    *Broombase
+	node     *Node
+	database *Broombase
+
+	msgChan chan []byte
+
 	blockChan   chan Block
 	txnChan     chan Transaction
 	mempool     map[string]Transaction
@@ -48,9 +51,14 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	egressTxnChan := make(chan Transaction)
 	mempool := make(map[string]Transaction)
 
+	msgChannel := make(chan []byte, 10)
+
 	ex := &Executor{
 		controlChan: make(chan struct{}),
 		database:    bb,
+
+		msgChan: msgChannel,
+
 		blockChan:   blockChan,
 		txnChan:     txnChan,
 		mempool:     mempool,
@@ -68,7 +76,7 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 func (ex *Executor) Start(workers int, seeds ...string) {
 
-	ex.node = ActivateNode(ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, seeds...)
+	ex.node = ActivateNode(ex.msgChan, ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, seeds...)
 
 	if len(seeds) != 0 {
 		for {
@@ -416,6 +424,7 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_PostTransaction()
 	ex.server_PostBlock()
 	ex.server_HighestBlock()
+	ex.server_Msg()
 
 	go func() {
 		fmt.Println("Starting HTTP server on port", EXPOSED_PORT)
@@ -562,6 +571,21 @@ func (ex *Executor) server_HighestBlock() {
 		if err := json.NewEncoder(w).Encode(hh); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+
+	}))
+}
+
+func (ex *Executor) server_Msg() {
+	ex.mux.Handle("/msg", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		msg, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad msg", 400)
+			return
+		}
+		ex.msgChan <- msg
+
+		w.Write([]byte("Thank you for the msg!"))
 
 	}))
 }

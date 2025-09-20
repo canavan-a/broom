@@ -70,15 +70,22 @@ type Node struct {
 
 	egressBlock chan Block
 	egressTxn   chan Transaction
+
+	requestPeers map[string]*RequestPeer
 }
 
-func ActivateNode(ingressBlock, egressBlock chan Block, ingressTxn, egressTxn chan Transaction, seedNodes ...string) *Node {
+type RequestPeer struct {
+	ip      string
+	strikes int
+}
+
+func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, ingressTxn, egressTxn chan Transaction, seedNodes ...string) *Node {
 
 	node := &Node{
 		seeds:        seedNodes,
 		peers:        make(map[string]*Peer),
 		mutex:        sync.Mutex{},
-		msgChannel:   make(chan []byte, 10),
+		msgChannel:   msgChannel,
 		ingressBlock: ingressBlock,
 		ingressTxn:   ingressTxn,
 		egressBlock:  egressBlock,
@@ -88,11 +95,6 @@ func ActivateNode(ingressBlock, egressBlock chan Block, ingressTxn, egressTxn ch
 	// seed the supplied node ips
 	node.Seed()
 
-	// listen to incoming connections
-	node.StartListenIncomingConnections()
-
-	node.StartListenIncomingMessages()
-
 	node.RunEgress()
 
 	node.Schedule(node.GossipPeers, time.Minute*5)
@@ -101,11 +103,13 @@ func ActivateNode(ingressBlock, egressBlock chan Block, ingressTxn, egressTxn ch
 }
 
 func (n *Node) GossipPeers() {
+
+	fmt.Println("gossiping peers")
 	// TODO: only broadcast a subset of peers out
 	n.mutex.Lock()
 	var peerHosts []string
-	for _, peer := range n.peers {
-		peerHosts = append(peerHosts, peer.address)
+	for _, peer := range n.requestPeers {
+		peerHosts = append(peerHosts, peer.ip)
 	}
 	n.mutex.Unlock()
 
@@ -123,32 +127,12 @@ func (n *Node) GossipPeers() {
 }
 
 func (n *Node) Seed() {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
 	for _, seed := range n.seeds {
-		go n.SeedDial(seed)
-	}
-}
-
-func (n *Node) SeedDial(seed string) {
-	for {
-		peer, err := n.DialPeer(seed)
-		if err != nil {
-			continue
+		n.requestPeers[seed] = &RequestPeer{
+			ip: seed,
 		}
-
-		n.mutex.Lock()
-		n.peers[seed] = peer
-		n.mutex.Unlock()
-
-		peer.ListenProtocol(n.msgChannel)
-
-		n.mutex.Lock()
-		n.peers[seed].conn.Close()
-		delete(n.peers, seed)
-		n.mutex.Unlock()
-
-		fmt.Println("retrying seed node dial")
-		time.Sleep(RETRY_TIME * time.Second)
-
 	}
 }
 
@@ -238,13 +222,13 @@ func (n *Node) handleConn(conn net.Conn) {
 }
 
 func (n *Node) addPeerFromHost(host string) {
-	peer, err := n.DialPeer(host)
-	if err != nil {
-		fmt.Println("could not dial peer")
-		return
+
+	n.mutex.Lock()
+	defer n.mutex.Lock()
+	n.requestPeers[host] = &RequestPeer{
+		ip: host,
 	}
 
-	go n.handleConn(peer.conn)
 }
 
 func (n *Node) StartListenIncomingMessages() {
@@ -252,20 +236,54 @@ func (n *Node) StartListenIncomingMessages() {
 		for {
 			msg := <-n.msgChannel
 			n.processIncomingMessage(msg)
+			fmt.Println("msg received")
 		}
 	}()
 }
 
 func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
-	formattedMsg := formatMsg(rawMsg)
 	n.mutex.Lock()
 	defer n.mutex.Unlock()
-	for _, peer := range n.peers {
-		_, err := peer.conn.Write(formattedMsg)
+
+	for _, peer := range n.requestPeers {
+		err := peer.SendMsg(rawMsg)
 		if err != nil {
-			// do nothing
+			peer.strikes += 1
+		} else {
+			peer.strikes -= 1
 		}
+
 	}
+}
+
+func (r *RequestPeer) SendMsg(msg []byte) error {
+	secureRequest := ""
+
+	host := r.ip
+	if net.ParseIP(host) == nil {
+		secureRequest = "s"
+	}
+
+	ctx := context.Background()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http%s://%s/msg", secureRequest, r.ip), bytes.NewReader(msg))
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		err = errors.New("bad request")
+		return err
+
+	}
+
+	return nil
 }
 
 func (n *Node) Schedule(task func(), period time.Duration) {
@@ -320,7 +338,7 @@ func (n *Node) BalancePeers(hostNames []string) {
 	var currentPeers []string
 
 	n.mutex.Lock()
-	for peer := range n.peers {
+	for peer := range n.requestPeers {
 		currentPeers = append(currentPeers, peer)
 	}
 	n.mutex.Unlock()
@@ -335,12 +353,8 @@ func (n *Node) BalancePeers(hostNames []string) {
 	for _, newPeer := range newPeers {
 		if len(currentPeers)+1 > MAX_PEER_CONNECTIONS {
 
-			randomNumber := rand.Intn(10) + 1 // 1–10
-			if randomNumber == 10 {
-				if n.DropRandomPeer() {
-					n.addPeerFromHost(newPeer)
-				}
-			}
+			// do nothing
+			// eventually balance peers
 
 		} else {
 			n.addPeerFromHost(newPeer)
