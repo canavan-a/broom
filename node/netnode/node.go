@@ -98,6 +98,8 @@ func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, 
 
 	node.RunEgress()
 
+	node.StartListenIncomingMessages()
+
 	node.Schedule(node.GossipPeers, time.Minute*5)
 
 	return node

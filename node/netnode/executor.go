@@ -18,6 +18,8 @@ import (
 const EXECUTOR_WORKER_COUNT = 4
 const SYNC_CHECK_DURATION = 2 * time.Minute
 
+const CHANNEL_BUFFER_SIZE = 10
+
 type Executor struct {
 	mining      bool
 	controlChan chan struct{}
@@ -44,14 +46,14 @@ type Executor struct {
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string) *Executor {
 
 	bb := InitBroombaseWithDir(dir, ledgerDir)
-	blockChan := make(chan Block)
-	txnChan := make(chan Transaction)
+	blockChan := make(chan Block, CHANNEL_BUFFER_SIZE)
+	txnChan := make(chan Transaction, CHANNEL_BUFFER_SIZE)
 
-	egressBlockChan := make(chan Block)
-	egressTxnChan := make(chan Transaction)
+	egressBlockChan := make(chan Block, CHANNEL_BUFFER_SIZE)
+	egressTxnChan := make(chan Transaction, CHANNEL_BUFFER_SIZE)
 	mempool := make(map[string]Transaction)
 
-	msgChannel := make(chan []byte, 10)
+	msgChannel := make(chan []byte, CHANNEL_BUFFER_SIZE)
 
 	ex := &Executor{
 		controlChan: make(chan struct{}),
