@@ -273,6 +273,9 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		if err != nil {
 			panic(err)
 		}
+
+		fmt.Println("ledger height: ", ex.database.ledger.BlockHeight)
+
 		lowestHeightToSync++
 
 	}

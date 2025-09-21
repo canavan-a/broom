@@ -155,79 +155,10 @@ func (n *Node) DialPeer(address string) (*Peer, error) {
 
 }
 
-func (n *Node) StartListenIncomingConnections() {
-	go func() {
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%s", TCP_PORT)) // listen on port 12345
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer ln.Close()
-
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				fmt.Println("could not accept tcp conn")
-				continue
-			}
-			go n.handleConn(conn)
-		}
-	}()
-
-}
-
-func (n *Node) handleConn(conn net.Conn) {
-	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
-	if err != nil {
-		return
-	}
-
-	defer conn.Close()
-
-	n.mutex.Lock()
-	// max check
-	peerLength := len(n.peers)
-
-	// check duplicates
-	_, found := n.peers[host]
-
-	n.mutex.Unlock()
-
-	if found {
-		return
-	}
-
-	if peerLength >= MAX_PEER_CONNECTIONS {
-		return
-	}
-
-	retries := 0
-	for {
-		n.mutex.Lock()
-		n.peers[host] = &Peer{
-			start:   time.Now(),
-			address: host,
-			conn:    conn,
-		}
-		n.mutex.Unlock()
-
-		n.peers[host].ListenProtocol(n.msgChannel)
-
-		n.mutex.Lock()
-		delete(n.peers, host)
-		n.mutex.Unlock()
-		if retries == PEER_CONNECTION_RETRIES {
-			break
-		}
-		time.Sleep(RETRY_TIME * time.Second)
-		retries++
-	}
-
-}
-
 func (n *Node) addPeerFromHost(host string) {
 
 	n.mutex.Lock()
-	defer n.mutex.Lock()
+	defer n.mutex.Unlock()
 	n.requestPeers[host] = &RequestPeer{
 		ip: host,
 	}
@@ -609,7 +540,10 @@ func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
 }
 
 func (n *Node) GetAddressSample() []string {
+
+	fmt.Println("getting node lock")
 	n.mutex.Lock()
+	fmt.Println("node lock aquired")
 	// // sample for n peer's addresses
 	var allAddresses []string
 	for _, peer := range n.requestPeers {
@@ -617,9 +551,13 @@ func (n *Node) GetAddressSample() []string {
 	}
 	n.mutex.Unlock()
 
+	fmt.Println("grabbed addresses")
+
 	rand.Shuffle(len(allAddresses), func(i, j int) {
 		allAddresses[i], allAddresses[j] = allAddresses[j], allAddresses[i]
 	})
+
+	fmt.Println("shuffled addresses")
 
 	var sample []string
 	if len(allAddresses) >= PEER_SAMPLE_SIZE {
@@ -627,6 +565,8 @@ func (n *Node) GetAddressSample() []string {
 	} else {
 		sample = allAddresses
 	}
+
+	fmt.Println("sample created")
 
 	return sample
 }
