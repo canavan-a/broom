@@ -21,6 +21,7 @@ type Config struct {
 	Address string   `json:"address"`
 	Note    string   `json:"note"`
 	Seeds   []string `json:"seeds"`
+	ID      string   `json:"id"` //  this is your public url
 }
 
 func NewCli() *Cli {
@@ -70,7 +71,11 @@ func (cli *Cli) WriteConfig(cfg Config) error {
 	return nil
 }
 
-func (cli *Cli) EditConfig(note, address string, seeds ...string) {
+func (cli *Cli) EditConfig(note, address, id string, seeds ...string) {
+
+	if id != "" {
+		cli.config.ID = id
+	}
 
 	if note != "" {
 		cli.config.Note = note
@@ -121,14 +126,14 @@ func (cli *Cli) Run() {
 				wrkrs, err := strconv.Atoi(args[2])
 				if err == nil && wrkrs != 0 {
 					fmt.Printf("Starting with %d workers.\n", wrkrs)
-					cli.ex.Start(wrkrs, cli.config.Seeds...)
+					cli.ex.Start(wrkrs, cli.config.ID, cli.config.Seeds...)
 				}
 			} else {
 				fmt.Println("invalid workers flag")
 			}
 		} else {
 			fmt.Println("Starting node")
-			cli.ex.Start(netnode.EXECUTOR_WORKER_COUNT, cli.config.Seeds...)
+			cli.ex.Start(netnode.EXECUTOR_WORKER_COUNT, cli.config.ID, cli.config.Seeds...)
 		}
 	case "backup":
 		cli.initExecutor()
@@ -143,19 +148,22 @@ func (cli *Cli) Run() {
 func (cli *Cli) DoConfig(s []string) {
 	switch s[0] {
 	case "address":
-		cli.EditConfig("", s[1])
+		cli.EditConfig("", s[1], "")
 	case "note":
-		cli.EditConfig(s[1], "")
+		cli.EditConfig(s[1], "", "")
 	case "seeds":
 		if s[1] == "clear" {
 			cli.ClearSeeds()
 		} else {
-			cli.EditConfig("", "", s[1:]...)
+			cli.EditConfig("", "", "", s[1:]...)
 		}
+	case "id":
+		cli.EditConfig("", "", s[1])
 	case "show":
 		fmt.Println("Address: ", cli.config.Address)
 		fmt.Println("Note: ", cli.config.Note)
 		fmt.Println("Seeds: ", cli.config.Seeds)
+		fmt.Println("Id: ", cli.config.ID)
 	default:
 		fmt.Println("options: address, note, show")
 	}

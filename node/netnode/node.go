@@ -60,6 +60,8 @@ type Message struct {
 
 type Node struct {
 	seeds []string
+
+	self  string
 	peers map[string]*Peer
 
 	mutex      sync.Mutex
@@ -79,10 +81,13 @@ type RequestPeer struct {
 	strikes int
 }
 
-func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, ingressTxn, egressTxn chan Transaction, seedNodes ...string) *Node {
+func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, ingressTxn, egressTxn chan Transaction, self string, seedNodes ...string) *Node {
 
 	node := &Node{
-		seeds:        seedNodes,
+		seeds: seedNodes,
+
+		self: self,
+
 		peers:        make(map[string]*Peer),
 		mutex:        sync.Mutex{},
 		msgChannel:   msgChannel,
@@ -115,6 +120,10 @@ func (n *Node) GossipPeers() {
 		peerHosts = append(peerHosts, peer.ip)
 	}
 	n.mutex.Unlock()
+
+	if n.self != "" {
+		peerHosts = append(peerHosts, n.self)
+	}
 
 	hostsMessage := Message{
 		Action:    PeerBroadcast,
@@ -278,6 +287,12 @@ func (n *Node) BalancePeers(hostNames []string) {
 		currentPeers = append(currentPeers, peer)
 	}
 	n.mutex.Unlock()
+
+	// add self to current peers for the calculation
+	// this ensures we do not add yourself to the peer list
+	if n.self != "" {
+		currentPeers = append(currentPeers, n.self)
+	}
 
 	var newPeers []string
 	for _, host := range hostNames {

@@ -76,9 +76,9 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	return ex
 }
 
-func (ex *Executor) Start(workers int, seeds ...string) {
+func (ex *Executor) Start(workers int, self string, seeds ...string) {
 
-	ex.node = ActivateNode(ex.msgChan, ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, seeds...)
+	ex.node = ActivateNode(ex.msgChan, ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, self, seeds...)
 
 	if len(seeds) != 0 {
 		for {
