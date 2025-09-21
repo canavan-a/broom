@@ -98,6 +98,10 @@ func (ex *Executor) Start(workers int, seeds ...string) {
 	fmt.Println("Syncing to network")
 	ex.NetworkSync(ctx)
 
+	fmt.Println("escaped network sync height", ex.database.ledger.BlockHeight)
+
+	ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
+
 	fmt.Println("Node running")
 	ex.RunMiningLoop(ctx, workers)
 
@@ -280,6 +284,8 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 
 	}
 
+	fmt.Println("final sync ledger height: ", ex.database.ledger.BlockHeight)
+
 	return
 
 }
@@ -309,6 +315,8 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			fmt.Println("running network sync")
 			syncRequired := ex.NetworkSyncWithTracker(ctx)
 			if syncRequired {
+
+				ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
 				//clear the mempool, we had to sync and don't know what txns are added or not added
 				ex.mempool = make(map[string]Transaction)
 			}
