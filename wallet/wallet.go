@@ -183,8 +183,12 @@ func (w *Wallet) SyncBalance() error {
 		return err
 	}
 
+	wg := sync.WaitGroup{}
+
 	for _, seed := range w.Seeds {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			balance, nonce, err := w.CheckSeedBalance(seed, address)
 			if err == nil {
 				mut.Lock()
@@ -199,6 +203,7 @@ func (w *Wallet) SyncBalance() error {
 		}()
 	}
 
+	wg.Wait()
 	var winner NonceBalanceVote
 
 	for _, candidate := range results {
@@ -565,7 +570,7 @@ func (w *Wallet) BroadcastTxn(address string, txn netnode.Transaction) error {
 		return err
 	}
 
-	resp, err := http.Post(fmt.Sprintf("http%s://%s/address", secureRequest, address), "application/json", bytes.NewReader(data))
+	resp, err := http.Post(fmt.Sprintf("http%s://%s/transaction", secureRequest, address), "application/json", bytes.NewReader(data))
 	if err != nil {
 		return err
 	}

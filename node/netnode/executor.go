@@ -382,11 +382,16 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 			if sigValid && sizeValid {
 				//TODO: validate nonce and balance against current ledger
+
+				fmt.Println("txn from", txn.From)
 				accountBalance, balanceFound := ex.database.ledger.GetAddressBalance(txn.From)
+				fmt.Println("account balance", accountBalance)
 
-				accountNonce, nonceFound := ex.database.ledger.GetAddressNonce(txn.From)
+				accountNonce, _ := ex.database.ledger.GetAddressNonce(txn.From)
+				fmt.Println("txn nonce:", txn.Nonce)
 
-				if balanceFound && nonceFound {
+				if balanceFound {
+					fmt.Println("Found balance and nonce")
 
 					addressTxns := ex.getAddressTransactions(txn.From)
 
@@ -395,8 +400,9 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 					err := ValidateTransactionGroup(accountBalance, accountNonce, addressTxns)
 					if err != nil {
 						// pass: do nothing, txn is not validated
-
+						fmt.Println("could not validate txn: ", err)
 					} else {
+						fmt.Println("adding txn to block, mempool, and sending out")
 						// egress the txn
 						ex.egressTxnChan <- txn
 
@@ -404,6 +410,8 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 						ex.mempool[txn.Sig] = txn
 						ex.miningBlock.Add(txn)
 					}
+				} else {
+					fmt.Println("could not find balance and nonce")
 				}
 
 			}
@@ -549,6 +557,8 @@ func (ex *Executor) server_PostTransaction() {
 			http.Error(w, "invalid txn", 400)
 			return
 		}
+
+		fmt.Println("Txn headers validated")
 
 		// ingress txn
 		ex.txnChan <- txn

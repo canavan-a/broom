@@ -509,6 +509,8 @@ func (l *Ledger) GetAddressNonce(address string) (int64, bool) {
 
 	nonce, found := l.Nonces[address]
 
+	fmt.Println(l.Nonces)
+
 	return nonce, found
 
 }
