@@ -19,11 +19,11 @@ const LEDGER_DEFAULT_DIR = "ledger"
 
 const GENESIS_BLOCK_HEIGHT = 0
 
-const BLOCK_SPEED_AVERAGE_WINDOW = 50
+const BLOCK_SPEED_AVERAGE_WINDOW = 150
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 const TARGET_BLOCK_TIME = 60
-const ALPHA_FACTOR = 4
+const ALPHA_FACTOR = 16
 
 type Broombase struct {
 	mut       sync.RWMutex

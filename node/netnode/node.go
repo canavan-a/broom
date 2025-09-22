@@ -105,7 +105,7 @@ func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, 
 
 	node.StartListenIncomingMessages()
 
-	node.Schedule(node.GossipPeers, time.Minute*5)
+	node.Schedule(node.GossipPeers, time.Minute*2)
 
 	return node
 }
@@ -192,6 +192,7 @@ func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
 		err := peer.SendMsg(rawMsg)
 		if err != nil {
 			fmt.Println("send strike, could not send msg to peer")
+			fmt.Println("bad peer: ", peer.ip)
 			peer.strikes += 1
 		} else {
 			fmt.Println("sent message to peer :)")
