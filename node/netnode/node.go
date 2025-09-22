@@ -188,17 +188,29 @@ func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
 	n.mutex.Lock()
 	defer n.mutex.Unlock()
 
+	var tooManyStrikes []string
+
 	for _, peer := range n.requestPeers {
 		err := peer.SendMsg(rawMsg)
 		if err != nil {
 			fmt.Println("send strike, could not send msg to peer")
 			fmt.Println("bad peer: ", peer.ip)
+
+			if peer.strikes >= 10 {
+				fmt.Println("too many strikes: removing peer: ", peer.ip)
+				tooManyStrikes = append(tooManyStrikes, peer.ip)
+			}
+
 			peer.strikes += 1
 		} else {
 			fmt.Println("sent message to peer :)")
-			peer.strikes -= 1
+			peer.strikes = 0
 		}
 
+	}
+
+	for _, ip := range tooManyStrikes {
+		delete(n.requestPeers, ip)
 	}
 }
 

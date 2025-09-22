@@ -12,11 +12,7 @@ The ledger is backed by Ed25519 Elliptic curve key signiatures for all cryptogra
 
 ## Node messaging protocol
 
-Nodes communicate on port 4188 and messages are passed via a bytestream of encoded json. Each message starts with a unique byte delimeter 276
-
-protocol looks like:
-
-`276` `8 bytes length value` `data (however long the length value says)`
+Nodes no longer communicate on a custom TCP protocol. They send messages back and forth to each other over http. IP addresses are assumed to use http while hostnames are assumed to use https. Most of the network uses CloudFlare tunnels as a proxy to bypass port forwarding on closed networks.
 
 ## Cryptography
 
@@ -108,3 +104,18 @@ There is an edge case that exists where the network gets ahead of the current no
 The network needs to distribute valid txns and blocks. The default node behavior will be to broadcast valid txns and blocks. This doe snot include txns that have already been added. We verify, add to our own ledger, blockchain, mempool; then we broadcast to our peers the good data.
 
 ## Mempool
+
+The mempool is a set of txns that sit in memory. Upon receiving a new txn, the txn is placed in the current mining block and the mempool. When a solution comes in for the current mining block (either youself or a peer) we clear the mempool of txns in that block, append the mempool txns to the next block and start mining again.
+
+## Mining Difficulty
+
+The mining difficulty is calculated off the basis of the last 150 block difficulties and timespans.
+
+We start at `0ffffff....` for the first 4 blocks. We progress forward off the following ledger calculation `_calculateNewMiningThreshold`:
+
+$$
+\mathrm{newDiff} =
+\mathrm{oldDiff} \cdot \left( 1 + \dfrac{1}{\mathrm{ALPHA\_FACTOR}} \cdot \dfrac{\mathrm{avgGap} - T}{T} \right)
+$$
+
+Where `T` is the target time gap `60s`.
