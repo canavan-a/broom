@@ -29,6 +29,10 @@ const WALLET_FILENAME = "walletconfig.broom"
 
 const WALLET_DATA_FILENAME = "walletdata.broom"
 
+type WalletTransaction struct {
+	netnode.Transaction
+}
+
 type Wallet struct {
 	Seeds      []string
 	PrivateKey *ecdsa.PrivateKey
@@ -36,6 +40,8 @@ type Wallet struct {
 
 	Balance int
 	Nonce   int
+
+	Pending []WalletTransaction
 }
 
 type Config struct {
@@ -45,8 +51,9 @@ type Config struct {
 }
 
 type Data struct {
-	Balance int `json:"balance"`
-	Nonce   int `json:"nonce"`
+	Balance int                 `json:"balance"`
+	Nonce   int                 `json:"nonce"`
+	Pending []WalletTransaction `json:"pending"`
 }
 
 func MakeWallet() *Wallet {
@@ -59,7 +66,7 @@ func MakeWallet() *Wallet {
 
 	err = w.LoadData()
 	if err != nil {
-		fmt.Println("could not load keypair from cfg")
+		fmt.Println("could not load data file")
 	}
 
 	return w
@@ -79,6 +86,14 @@ func (w *Wallet) Run() {
 		w.SyncBalance()
 		fmt.Println("balance synced")
 		fmt.Println("Balance: ", float64(w.Balance)/1000.0)
+
+		if len(w.Pending) != 0 {
+			fmt.Println("---- PENDING TXNS -----")
+
+		}
+		for _, txn := range w.Pending {
+			fmt.Println(">> ", float64(txn.Amount)/1000.0)
+		}
 	case "balance":
 		fmt.Println("Run sync to update network")
 		fmt.Println("Balance: ", float64(w.Balance)/1000.0)
@@ -91,6 +106,9 @@ func (w *Wallet) Run() {
 	case "send":
 		w.Send()
 		fmt.Println("Send Broom")
+
+	case "pending":
+		fmt.Println("Pending txns: ", len(w.Pending))
 	case "generate-keys":
 		if !w.AreYouSure("generating new keys, this will overwrite existing keys") {
 			return
@@ -216,10 +234,21 @@ func (w *Wallet) SyncBalance() error {
 
 	w.Nonce = int(winner.nonce)
 
+	var newPending []WalletTransaction
+
+	for _, txn := range w.Pending {
+		if w.Nonce < int(txn.Nonce) {
+			newPending = append(newPending, txn)
+		}
+	}
+
 	w.WriteData(Data{
 		Nonce:   w.Nonce,
 		Balance: w.Balance,
+		Pending: newPending,
 	})
+
+	w.LoadData()
 
 	return nil
 
@@ -367,6 +396,7 @@ func (w *Wallet) LoadData() error {
 
 	w.Balance = dat.Balance
 	w.Nonce = dat.Nonce
+	w.Pending = dat.Pending
 
 	return nil
 
@@ -468,7 +498,18 @@ func (w *Wallet) Send() {
 
 	txn.From = pub
 
-	txn.Nonce = int64(w.Nonce) + 1
+	// calculate nonce off pending txns
+	if len(w.Pending) == 0 {
+		txn.Nonce = int64(w.Nonce) + 1
+	} else {
+		maxNonce := w.Pending[0].Nonce
+		for _, pend := range w.Pending {
+			if pend.Nonce > maxNonce {
+				maxNonce = pend.Nonce
+			}
+		}
+		txn.Nonce = maxNonce + 1
+	}
 
 	fmt.Println("Enter recipient address:")
 	scanner := bufio.NewScanner(os.Stdin)
@@ -528,6 +569,13 @@ func (w *Wallet) Send() {
 
 	w.BroadcastTxns(txn)
 
+	w.Pending = append(w.Pending, WalletTransaction{Transaction: txn})
+	w.WriteData(Data{
+		Nonce:   w.Nonce,
+		Balance: w.Balance,
+		Pending: w.Pending,
+	})
+
 }
 
 func (w *Wallet) BroadcastTxns(txn netnode.Transaction) {
@@ -580,4 +628,8 @@ func (w *Wallet) BroadcastTxn(address string, txn netnode.Transaction) error {
 	}
 
 	return nil
+}
+
+func (w *Wallet) AddPendingTxn(txn netnode.Transaction) {
+
 }

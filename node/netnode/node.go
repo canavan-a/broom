@@ -195,6 +195,7 @@ func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
 		if err != nil {
 			fmt.Println("send strike, could not send msg to peer")
 			fmt.Println("bad peer: ", peer.ip)
+			fmt.Println("current peer strikes: ", peer.strikes)
 
 			if peer.strikes >= 10 {
 				fmt.Println("too many strikes: removing peer: ", peer.ip)
