@@ -115,7 +115,7 @@ We start at `0ffffff....` for the first 4 blocks. We progress forward off the fo
 
 $$
 \mathrm{newDiff} =
-\mathrm{oldDiff} \cdot \left( 1 + \dfrac{1}{\mathrm{ALPHA\_FACTOR}} \cdot \dfrac{\mathrm{avgGap} - T}{T} \right)
+\mathrm{averageDiff} \cdot \left( 1 + \dfrac{1}{\mathrm{ALPHA\_FACTOR}} \cdot \dfrac{\mathrm{avgGap} - T}{T} \right)
 $$
 
 Where `T` is the target time gap `60s`.

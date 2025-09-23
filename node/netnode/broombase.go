@@ -689,19 +689,6 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 		return fmt.Sprintf("%064x", bigAverage)
 	}
 
-	oldDifficultyString := ""
-	highestHeight := 0
-
-	for _, d := range l.BlockTimeDifficulty {
-		if d.Height > int64(highestHeight) {
-			highestHeight = int(d.Height)
-			oldDifficultyString = d.Difficulty
-		}
-	}
-
-	oldDifficulty := new(big.Int)
-	oldDifficulty.SetString(oldDifficultyString, 16)
-
 	alpha := big.NewRat(1, ALPHA_FACTOR)
 
 	difference := big.NewInt(int64(average - TARGET_BLOCK_TIME))
@@ -714,7 +701,7 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 
 	alphaProductP1 := new(big.Rat).Add(one, alphaProduct)
 
-	oldDiffRat := new(big.Rat).SetInt(oldDifficulty) // oldDiff is *big.Int
+	oldDiffRat := new(big.Rat).SetInt(bigAverage) // oldDiff is *big.Int
 	newDiffRat := new(big.Rat).Mul(oldDiffRat, alphaProductP1)
 
 	newDiffInt := new(big.Int).Div(newDiffRat.Num(), newDiffRat.Denom())
