@@ -319,6 +319,33 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 				ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
 				//clear the mempool, we had to sync and don't know what txns are added or not added
 				ex.mempool = make(map[string]Transaction)
+			} else {
+				// I may be tracking a higher fork but not using it
+				fmt.Println("checking for fork disparity")
+				height, hash, err := ex.database.getHighestBlock()
+				if err != nil {
+					panic("must be able to get highets block")
+				}
+
+				if height > ex.database.ledger.BlockHeight {
+					fmt.Println("fixing height disparity")
+					ledger, found := ex.database.GetLedgerAt(hash, height)
+					if found {
+						ex.database.ledger.mut.Lock()
+						ledger.mut = ex.database.ledger.mut
+						fmt.Println("setting ledger")
+						ex.database.ledger = ledger
+						ex.database.ledger.mut.Unlock()
+
+						// clear our mempool
+						ex.mempool = make(map[string]Transaction)
+						// set out mining block height
+						ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
+
+					}
+
+				}
+
 			}
 
 			timer.Reset(SYNC_CHECK_DURATION)
