@@ -23,7 +23,7 @@ const BLOCK_SPEED_AVERAGE_WINDOW = 150
 const DEFAULT_MINING_THRESHOLD = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 const TARGET_BLOCK_TIME = 60
-const ALPHA_FACTOR = 16
+const ALPHA_FACTOR = 4
 
 type Broombase struct {
 	mut       sync.RWMutex
