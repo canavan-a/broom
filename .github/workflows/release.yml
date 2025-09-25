@@ -3,7 +3,7 @@ name: Release Node & Wallet
 on:
     push:
         tags:
-            - "v*"
+            - "v*" # triggers on tags like v1.0.0
 
 jobs:
     build:
@@ -11,28 +11,29 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            # Create a single release folder at repo root
             - name: Create release folder
               run: mkdir -p release
 
+            # Build Node binaries
             - name: Build Node
               working-directory: ./node
               run: |
                   VERSION=${GITHUB_REF#refs/tags/}
-                  GOOS=linux GOARCH=amd64 go build -o ../../release/broom-$VERSION-amd64 .
-                  GOOS=linux GOARCH=arm64 go build -o ../../release/broom-$VERSION-arm64 .
-                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../../release/broom-$VERSION-armv7 .
+                  GOOS=linux GOARCH=amd64 go build -o ../release/broom-$VERSION-amd64 .
+                  GOOS=linux GOARCH=arm64 go build -o ../release/broom-$VERSION-arm64 .
+                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../release/broom-$VERSION-armv7 .
 
+            # Build Wallet binaries
             - name: Build Wallet
               working-directory: ./wallet
               run: |
                   VERSION=${GITHUB_REF#refs/tags/}
-                  GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
-                  GOOS=linux GOARCH=arm64 go build -o ../../release/wallet-$VERSION-arm64 .
-                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../../release/wallet-$VERSION-armv7 .
+                  GOOS=linux GOARCH=amd64 go build -o ../release/wallet-$VERSION-amd64 .
+                  GOOS=linux GOARCH=arm64 go build -o ../release/wallet-$VERSION-arm64 .
+                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../release/wallet-$VERSION-armv7 .
 
-            - name: List Files
-              run: ls ./release
-
+            # Upload all binaries to GitHub release
             - name: Release
               uses: softprops/action-gh-release@v1
               with:
