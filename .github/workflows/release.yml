@@ -3,7 +3,7 @@ name: Release Node & Wallet
 on:
     push:
         tags:
-            - "v*" # triggers on tags like v1.0.0
+            - "v*"
 
 jobs:
     build:
@@ -18,7 +18,7 @@ jobs:
               working-directory: ./node
               run: |
                   VERSION=${GITHUB_REF#refs/tags/}
-                  GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
+                  GOOS=linux GOARCH=amd64 go build -o ../../release/broom-$VERSION-amd64 .
                   GOOS=linux GOARCH=arm64 go build -o ../../release/broom-$VERSION-arm64 .
                   GOOS=linux GOARCH=arm GOARM=7 go build -o ../../release/broom-$VERSION-armv7 .
 
@@ -29,6 +29,9 @@ jobs:
                   GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
                   GOOS=linux GOARCH=arm64 go build -o ../../release/wallet-$VERSION-arm64 .
                   GOOS=linux GOARCH=arm GOARM=7 go build -o ../../release/wallet-$VERSION-armv7 .
+
+            - name: List Files
+              run: ls ./release
 
             - name: Release
               uses: softprops/action-gh-release@v1
