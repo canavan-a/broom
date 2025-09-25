@@ -3,6 +3,7 @@
 **/ledger_test/
 **/ledger/
 **/backup/
+**/broomtemp/
 
 *.exe
 

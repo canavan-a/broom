@@ -119,3 +119,35 @@ $$
 $$
 
 Where `T` is the target time gap `60s`.
+
+## CLI settings (Node)
+
+base comand: `broom`
+
+### config
+
+`broom config address {address}`: sets address the mining rewards should be deposited to.
+
+`broom config note {note}`: sets the note of the coinbase transaction for mining rewards.
+
+`broom config seeds {seed1} {seed2} {seed3}`: adds peer seeds (ip or domain) to your seed list. 
+
+`broom config id {my-ip-or-domain}`: sets your source ip, this is for sharing with peers.
+
+`broom config show`: prints out all config settings.
+
+### start
+
+`broom start workers {worker-number}`: starts the node with desired worker number.  each worker uses half a GB of RAM. Omit workers to use default.
+
+### backup
+
+`broom backup run`: runs a backup off your current block value, saves to backup dir.
+
+`broom backup file {filename}`: backs up the node off the specified tar.gz file.
+
+`broom backup peer {peer-ip-or-domain}`: downloads latest backup from trusted peer ip. Also unzips and loads the backup data.
+
+## CLI settings (Wallet)
+
+wallet settings here.
