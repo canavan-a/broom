@@ -105,7 +105,9 @@ func (ex *Executor) Start(workers int, self string, seeds ...string) {
 
 	// set backup schedule
 	ex.node.Schedule(func() {
+		fmt.Println("runnning backup")
 		ex.RunBackup()
+		fmt.Println("backup done")
 	}, time.Second*BACKUP_FREQUENCY)
 
 	fmt.Println("escaped network sync height", ex.database.ledger.BlockHeight)
