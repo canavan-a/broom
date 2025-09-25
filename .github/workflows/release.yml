@@ -1,0 +1,37 @@
+name: Release Node & Wallet
+
+on:
+    push:
+        tags:
+            - "v*" # triggers on tags like v1.0.0
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Build Node
+              working-directory: ./node
+              run: |
+                  mkdir -p ../../release
+                  VERSION=${GITHUB_REF#refs/tags/}
+                  GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
+                  GOOS=linux GOARCH=arm64 go build -o ../../release/broom-$VERSION-arm64 .
+                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../../release/broom-$VERSION-armv7 .
+
+            - name: Build Wallet
+              working-directory: ./wallet
+              run: |
+                  mkdir -p ../../release
+                  VERSION=${GITHUB_REF#refs/tags/}
+                  GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
+                  GOOS=linux GOARCH=arm64 go build -o ../../release/wallet-$VERSION-arm64 .
+                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../../release/wallet-$VERSION-armv7 .
+
+            - name: Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: release/*
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
