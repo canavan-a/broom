@@ -11,10 +11,12 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Create release folder
+              run: mkdir -p release
+
             - name: Build Node
               working-directory: ./node
               run: |
-                  mkdir -p ../../release
                   VERSION=${GITHUB_REF#refs/tags/}
                   GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
                   GOOS=linux GOARCH=arm64 go build -o ../../release/broom-$VERSION-arm64 .
@@ -23,7 +25,6 @@ jobs:
             - name: Build Wallet
               working-directory: ./wallet
               run: |
-                  mkdir -p ../../release
                   VERSION=${GITHUB_REF#refs/tags/}
                   GOOS=linux GOARCH=amd64 go build -o ../../release/wallet-$VERSION-amd64 .
                   GOOS=linux GOARCH=arm64 go build -o ../../release/wallet-$VERSION-arm64 .
