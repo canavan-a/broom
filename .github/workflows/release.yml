@@ -8,6 +8,8 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
+        permissions: # <--- ADD THIS BLOCK HERE
+            contents: write
         steps:
             - uses: actions/checkout@v4
 
