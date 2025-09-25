@@ -23,7 +23,7 @@ const CHANNEL_BUFFER_SIZE = 10
 
 const BACKUP_DIR = "backup"
 
-const BACKUP_FREQUENCY = 60 * 60 * 60 // every hour
+const BACKUP_FREQUENCY = 2 * 60 * 60 // every 2 hours
 
 type Executor struct {
 	mining      bool

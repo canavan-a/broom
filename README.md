@@ -83,13 +83,17 @@ Ledger snapshots are needed to resolve forks. The node needs the ability to vali
 
 The flow is as follows, we receive a block. If this block solves the current puzzle then we add it, updating the ledger. If it does not, we need to locate the previous ledger snapshot. We validate the block against this snapshot, accumulate the ledger on the validated block, and then save the accumulated ledger to the file to continue the fork.
 
+Every two minutes the network is sampled for a higher block. If successful the local chain attepmts to sync off this highest block.
+
+There are cases where we actually track a higher block than we are currently mining. This is done to protect against spam and conserve our mined fork. Every two minutes we check internally for a higher tracked fork locally in the broom database.
+
 ## Executor
 
 The executor runs a loop of mining, then breaks the loop when a new txn or block comes in. This block is added or txn is added to the chain or mining block and mempool respectively. Then mining continues. When a block is found and proven to be valid, we want to make sure the block solves our current solution and clear those txn out of the mempool. When restarting on top of that block we pull in all the remaining mempool txns.
 
 ## Network Syncing
 
-The network sync logic is somewhat inefficient because of the argon2 hashrate. The advised method to sync will be to get a snapshot of ledger and block data from a trusted source. I will be posting snapshot tar files of the entire network.
+The network sync logic is somewhat inefficient because of the argon2 hashrate. The advised method to sync will be to get a snapshot of ledger and block data from a trusted source. Syncs are more efficient using backups so you don't need to verify every block on the chain. You can backup using the CLI and a trusted peer.
 
 ### Sync Mechanics
 
@@ -130,7 +134,7 @@ base comand: `broom`
 
 `broom config note {note}`: sets the note of the coinbase transaction for mining rewards.
 
-`broom config seeds {seed1} {seed2} {seed3}`: adds peer seeds (ip or domain) to your seed list. 
+`broom config seeds {seed1} {seed2} {seed3}`: adds peer seeds (ip or domain) to your seed list.
 
 `broom config id {my-ip-or-domain}`: sets your source ip, this is for sharing with peers.
 
