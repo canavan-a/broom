@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/canavan-a/broom/node/netnode"
 )
@@ -103,6 +106,23 @@ func (cli *Cli) ClearSeeds() {
 
 }
 
+func (cli *Cli) AreYouSure(operation string) bool {
+	fmt.Printf("Are you sure you want to %s?\n", operation)
+	fmt.Println("Y/n")
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		line := scanner.Text()
+		if strings.Trim(strings.ToLower(line), " ") == "y" {
+			return true
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading:", err)
+	}
+
+	return false
+}
+
 func (cli *Cli) Run() {
 
 	flag.Parse()
@@ -138,7 +158,30 @@ func (cli *Cli) Run() {
 	case "backup":
 		cli.initExecutor()
 		fmt.Println("backing up")
-		cli.ex.RunBackup()
+		if len(args) <= 2 {
+			fmt.Println("flags: run, peer, file")
+		}
+		switch args[1] {
+		case "run":
+			cli.ex.RunBackup()
+		case "peer":
+			if !cli.AreYouSure("backup from network peer") {
+				return
+			}
+			fmt.Println("backing up off peer")
+			fmt.Println("peer: ", args[2])
+			cli.ex.DownloadBackupFileFromPeer(args[2])
+			fmt.Println("unzipping backup file")
+			cli.ex.BackupFromFile("backup.tar.gz")
+		case "file":
+			if !cli.AreYouSure("backup from file") {
+				return
+			}
+			fmt.Println("backing up off file")
+			fmt.Println("file: ", args[2])
+			cli.ex.BackupFromFile(args[2])
+		}
+
 	default:
 		fmt.Println("invalid command")
 	}

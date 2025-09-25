@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,6 +20,10 @@ const EXECUTOR_WORKER_COUNT = 4
 const SYNC_CHECK_DURATION = 2 * time.Minute
 
 const CHANNEL_BUFFER_SIZE = 10
+
+const BACKUP_DIR = "backup"
+
+const BACKUP_FREQUENCY = 60 * 60 * 60 // every hour
 
 type Executor struct {
 	mining      bool
@@ -97,6 +102,11 @@ func (ex *Executor) Start(workers int, self string, seeds ...string) {
 
 	fmt.Println("Syncing to network")
 	ex.NetworkSync(ctx)
+
+	// set backup schedule
+	ex.node.Schedule(func() {
+		ex.RunBackup()
+	}, time.Second*BACKUP_FREQUENCY)
 
 	fmt.Println("escaped network sync height", ex.database.ledger.BlockHeight)
 
@@ -480,6 +490,7 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_PostBlock()
 	ex.server_HighestBlock()
 	ex.server_Msg()
+	ex.server_Backup()
 
 	go func() {
 		fmt.Println("Starting HTTP server on port", EXPOSED_PORT)
@@ -704,7 +715,25 @@ func (ts *TempStorage) GetFirstBlockByHeight(height int) (string, bool) {
 }
 
 func (ex *Executor) RunBackup() error {
-	outFile, err := os.Create("backup.tar.gz")
+
+	dir := BACKUP_DIR
+
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		_ = os.MkdirAll(dir, 0755) // create if missing
+	}
+
+	existingBackupFile := fmt.Sprintf("%s/backup.tar.gz", dir)
+	oldBackupFilename := fmt.Sprintf("%s/backup_old.tar.gz", dir)
+
+	_, err := os.Stat(existingBackupFile)
+	if err == nil {
+		// file exists
+		os.Remove(oldBackupFilename)
+		os.Rename(existingBackupFile, oldBackupFilename)
+
+	}
+
+	outFile, err := os.Create("backup/backup.tar.gz")
 	if err != nil {
 		return err
 	}
@@ -715,7 +744,8 @@ func (ex *Executor) RunBackup() error {
 
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
-
+	ex.database.mut.Lock()
+	defer ex.database.mut.Unlock()
 	dirs := []string{
 		ex.database.ledgerDir,
 		ex.database.dir,
@@ -761,4 +791,132 @@ func (ex *Executor) RunBackup() error {
 	}
 
 	return nil
+}
+
+func (ex *Executor) server_Backup() {
+	ex.mux.Handle("/backup", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		file := BACKUP_DIR + "/backup.tar.gz"
+
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			http.Error(w, "Backup file not found", 404)
+			return
+		}
+
+		http.ServeFile(w, r, file)
+	}))
+}
+
+func (ex *Executor) DownloadBackupFileFromPeer(peerAddress string) {
+	secureRequest := ""
+	if net.ParseIP(peerAddress) == nil {
+		secureRequest = "s"
+	}
+
+	resp, err := http.Get(fmt.Sprintf("http%s://%s/backup", secureRequest, peerAddress))
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		panic("invalid status code")
+	}
+
+	out, err := os.Create("backup.tar.gz")
+	if err != nil {
+		panic(err)
+	}
+	defer out.Close()
+
+	var written int64
+	progress := func(p int64) {
+		fmt.Printf("\rDownloaded %d / %d bytes", p, resp.ContentLength)
+
+	}
+
+	reader := io.TeeReader(resp.Body, out)
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			written += int64(n)
+			progress(written)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+	}
+	fmt.Println("\nDone.")
+}
+
+func (ex *Executor) BackupFromFile(filename string) {
+	os.RemoveAll(BROOMBASE_DEFAULT_DIR)
+	os.RemoveAll(LEDGER_DEFAULT_DIR)
+
+	f, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		panic(err)
+	}
+	defer gz.Close()
+
+	tarReader := tar.NewReader(gz)
+
+	// first pass: count + total size
+	var fileCount int
+	var totalSize int64
+	for {
+		h, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+		if h.Typeflag == tar.TypeReg {
+			fileCount++
+			totalSize += h.Size
+		}
+	}
+
+	// rewind
+	f.Seek(0, io.SeekStart)
+	gz, _ = gzip.NewReader(f)
+	tarReader = tar.NewReader(gz)
+
+	// extract with progress
+	var extracted int
+	var extractedSize int64
+	for {
+		h, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		switch h.Typeflag {
+		case tar.TypeDir:
+			os.MkdirAll(h.Name, 0755)
+		case tar.TypeReg:
+			outFile, _ := os.Create(h.Name)
+			n, _ := io.Copy(outFile, tarReader)
+			outFile.Close()
+
+			extracted++
+			extractedSize += n
+			percent := float64(extractedSize) / float64(totalSize) * 100
+			fmt.Printf("\rExtracted %d/%d files (%.1f%%)", extracted, fileCount, percent)
+		}
+	}
+	fmt.Println("\nDone.")
 }

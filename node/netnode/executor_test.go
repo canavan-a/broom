@@ -101,3 +101,9 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 		time.Sleep(1 * time.Second)
 	}
 }
+
+func TestUnzip(t *testing.T) {
+	ex := Executor{}
+
+	ex.BackupFromFile("backup.tar.gz")
+}

@@ -2,6 +2,7 @@
 **/broombase_test/
 **/ledger_test/
 **/ledger/
+**/backup/
 
 *.exe
 
