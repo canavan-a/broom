@@ -1,6 +1,72 @@
-# Broom
+# Broom Ledger
 
-A distributed ledger written in Go based loosely on the Satoshi Nakamotot bitcoin whitepaper. Credit also given to Gary Gensler's course on MIT openCourseWare: Blockchain and Money. `Zero` dependencies outside of the Go standard library.
+A distributed ledger written in Go based loosely on the Satoshi Nakamotot bitcoin whitepaper. Credit also given to Gary Gensler's course on MIT openCourseWare: Blockchain and Money. `Zero` dependencies outside of the Go standard library and a few golang.org/x packages for cryptography.
+
+## Quickstart
+
+Install the latest wallet and node usin this command.
+
+```bash
+curl -sSL https://broomledger.com/install.sh | sudo bash
+```
+
+Initialize your wallet and create a keypair. This will store your config in `./config.broom`.
+
+Warning: `DO NOT LOSE YOUR PRIVATE KEY`
+
+```bash
+sudo wallet generate-keys
+```
+
+Get your wallet address.
+
+```bash
+sudo wallet address
+```
+
+## Quickstart Node
+
+Configure node with your mining address.
+
+```bash
+sudo broom config address MFkwEwYH......
+```
+
+Add a note.
+
+```bash
+sudo broom config note "hello world"
+```
+
+Add seed or seeds.
+
+```bash
+sudo broom config seeds node.broomldger.com example.notarealnode.com
+```
+
+### Configure id
+
+Note: Your node will need a publicly accessible hostname or IP. This will require assigning a dns name OR port forwarding your ip address. The easiest way to do this in a private network is [Cloudflare Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/). Please follow Cloudflare's TOS. Port 80 is used by default.
+
+After setup, assign your ID.
+
+```bash
+sudo broom config id hello.test.com
+```
+
+or
+
+```bash
+sudo broom config id 22.45.7.263
+```
+
+### Run the Node
+
+Each worker requires `500Mb` of ram so please assign workers appropriatly.
+
+```bash
+sudo broom start workers 2
+```
 
 ## Background
 
