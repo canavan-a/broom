@@ -29,6 +29,10 @@ const WALLET_FILENAME = "walletconfig.broom"
 
 const WALLET_DATA_FILENAME = "walletdata.broom"
 
+const CONVERSION_RATE_FORWARD = 436_634
+
+const CONVERSION_RATE_BACKWARDS = 436_634.0
+
 type WalletTransaction struct {
 	netnode.Transaction
 }
@@ -85,18 +89,18 @@ func (w *Wallet) Run() {
 	case "sync":
 		w.SyncBalance()
 		fmt.Println("balance synced")
-		fmt.Println("Balance: ", float64(w.Balance)/1000.0)
+		fmt.Printf("Balance: %.4f\n", float64(w.Balance)/CONVERSION_RATE_BACKWARDS)
 
 		if len(w.Pending) != 0 {
 			fmt.Println("---- PENDING TXNS -----")
 
 		}
 		for _, txn := range w.Pending {
-			fmt.Println(">> ", float64(txn.Amount)/1000.0)
+			fmt.Printf(">> %.4f\n", float64(txn.Amount)/CONVERSION_RATE_BACKWARDS)
 		}
 	case "balance":
 		fmt.Println("Run sync to update network")
-		fmt.Println("Balance: ", float64(w.Balance)/1000.0)
+		fmt.Printf("Balance: %.4f\n", float64(w.Balance)/CONVERSION_RATE_BACKWARDS)
 	case "address":
 		key, err := nodecrypto.GenerateAddress(*w.PublicKey)
 		if err != nil {
@@ -532,7 +536,7 @@ func (w *Wallet) Send() {
 
 			tmpAmt = amt
 
-			txn.Amount = int64(amt * 1000)
+			txn.Amount = int64(amt * CONVERSION_RATE_FORWARD)
 
 			if txn.Amount > int64(w.Balance) {
 				fmt.Println("Not enough funds.")
