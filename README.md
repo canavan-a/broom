@@ -70,15 +70,23 @@ sudo broom start workers 2
 
 ## Background
 
-Broom is not a token. It is the ledger and blockchain infrastructure that will support a future, unamed token. The name comes from history: in Medieval England, tally sticks were used to record debts by carving marks into wood. A broom, being a bundle of sticks, represents strength and resilience through unity. In Broom, each node is like a stick, individually small but collectively forming a secure, reliable system. Even if one fails, the whole network remains effective.
+Broom is the ledger and blockchain infrastructure that will support the Meridian token. The name comes from history: in Medieval England, tally sticks were used to record debts by carving marks into wood. A broom, being a bundle of sticks, represents strength and resilience through unity. In Broom, each node is like a stick, individually small but collectively forming a secure, reliable system. Even if one fails, the whole network remains effective.
 
 ## Overview
 
-The ledger is backed by Ed25519 Elliptic curve key signiatures for all cryptography. Addresses are generated from the public key and Kekccak256 hash. Broom uses JSON messages over TCP to transmit information between nodes. The starting verification algorithm is Proof of Work using a nunce formula. Proof of Stake will be implemented at a later date.
+The ledger is backed by Ed25519 Elliptic curve key signiatures for all cryptography. Addresses are generated from the public key and Kekccak256 hash. Broom uses Http to transmit information between nodes. The starting verification algorithm is Proof of Work using a nunce formula. Proof of Stake will be implemented at a later date.
+
+## Coinage
+
+The block reward is 10,000 Broom Ledger Token (BLT). This is the basis token for the ledger. When transacting token, the values are in Meridian.
+
+$$ 1 Meridian = 436,634 BLT $$
+
+With the block target of 60 seconds, the result is `33` meridian mined every day.
 
 ## Node messaging protocol
 
-Nodes no longer communicate on a custom TCP protocol. They send messages back and forth to each other over http. IP addresses are assumed to use http while hostnames are assumed to use https. Most of the network uses CloudFlare tunnels as a proxy to bypass port forwarding on closed networks.
+Nodes no longer communicate on a custom TCP protocol. They send messages back and forth to each other over http. IP addresses are assumed to use http while hostnames are assumed to use https. Most of the network uses CloudFlare tunnels as a proxy to bypass port forwarding on closed networks. This decision was made to ease deployment for new nodes.
 
 ## Cryptography
 
