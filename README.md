@@ -1,4 +1,4 @@
-# Broom Ledger + wallet
+# Broom ledger node + wallet
 
 A distributed ledger written in Go based loosely on the Satoshi Nakamotot bitcoin whitepaper. Credit also given to Gary Gensler's course on MIT openCourseWare: Blockchain and Money. `Zero` dependencies outside of the Go standard library and a few golang.org/x packages for cryptography.
 
