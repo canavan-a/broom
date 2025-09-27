@@ -192,7 +192,7 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 
 	// what if multiple blocks are added during this operation; we loop the network sync until it returns out directly (return a bool)
 
-	height, _, err := ex.Database.getHighestBlock()
+	height, _, err := ex.Database.GetHighestBlock()
 	if err != nil {
 		panic(err)
 	}
@@ -264,7 +264,7 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 	} else {
 		fmt.Println("setting ledger")
 		ex.Database.Ledger = ledger
-		ex.Database.Ledger.mut = &sync.RWMutex{}
+		ex.Database.Ledger.Mut = &sync.RWMutex{}
 	}
 
 	// move temp blocks over
@@ -334,7 +334,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			} else {
 				// I may be tracking a higher fork but not using it
 				fmt.Println("checking for fork disparity")
-				height, hash, err := ex.Database.getHighestBlock()
+				height, hash, err := ex.Database.GetHighestBlock()
 				if err != nil {
 					panic("must be able to get highets block")
 				}
@@ -343,11 +343,11 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 					fmt.Println("fixing height disparity")
 					ledger, found := ex.Database.GetLedgerAt(hash, height)
 					if found {
-						ex.Database.Ledger.mut.Lock()
-						ledger.mut = ex.Database.Ledger.mut
+						ex.Database.Ledger.Mut.Lock()
+						ledger.Mut = ex.Database.Ledger.Mut
 						fmt.Println("setting ledger")
 						ex.Database.Ledger = ledger
-						ex.Database.Ledger.mut.Unlock()
+						ex.Database.Ledger.Mut.Unlock()
 
 						// clear our mempool
 						ex.Mempool = make(map[string]Transaction)
@@ -432,7 +432,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 				if balanceFound {
 					fmt.Println("Found balance and nonce")
 
-					addressTxns := ex.getAddressTransactions(txn.From)
+					addressTxns := ex.GetAddressTransactions(txn.From)
 
 					addressTxns = append(addressTxns, txn)
 					// toValidate := append(ex.miningBlock.Transactions... )
@@ -469,7 +469,7 @@ func (ex *Executor) Mine(ctx context.Context, solutionChan chan Block, doneChan 
 	ex.MiningBlock.MineWithWorkers(ctx, ex.Database.Ledger.MiningThresholdHash, workers, solutionChan, doneChan)
 }
 
-func (ex *Executor) getAddressTransactions(address string) []Transaction {
+func (ex *Executor) GetAddressTransactions(address string) []Transaction {
 
 	var addressTxns []Transaction
 
@@ -628,7 +628,7 @@ func (ex *Executor) server_HighestBlock() {
 
 		var hh HashHeight
 
-		height, hash, err := ex.Database.getHighestBlock()
+		height, hash, err := ex.Database.GetHighestBlock()
 		if err != nil {
 			http.Error(w, "highest block not found", 404)
 			return

@@ -108,7 +108,7 @@ func TestGetHighestBlock(t *testing.T) {
 		mut: sync.RWMutex{},
 	}
 
-	height, hash, err := bb.getHighestBlock()
+	height, hash, err := bb.GetHighestBlock()
 	if err != nil {
 		t.Fail()
 	}

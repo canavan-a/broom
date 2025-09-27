@@ -45,7 +45,7 @@ type BlockTimeDifficulty struct {
 }
 
 type Ledger struct {
-	mut                 *sync.RWMutex         `json:"-"`
+	Mut                 *sync.RWMutex         `json:"-"`
 	MiningThresholdHash string                `json:"miningThreshold"`
 	BlockHeight         int64                 `json:"blockHeight"`
 	BlockHash           string                `json:"blockHash"`
@@ -74,7 +74,7 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 	bb := &Broombase{
 		mut: sync.RWMutex{},
 		Ledger: &Ledger{
-			mut:                 &sync.RWMutex{},
+			Mut:                 &sync.RWMutex{},
 			MiningThresholdHash: DEFAULT_MINING_THRESHOLD,
 			BlockHeight:         0,
 			Balances:            make(map[string]int64),
@@ -132,7 +132,7 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 
 	}
 
-	highestBlock, highestBlockHash, err := bb.getHighestBlock()
+	highestBlock, highestBlockHash, err := bb.GetHighestBlock()
 	if err != nil {
 		panic(err)
 	}
@@ -146,7 +146,7 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 	} else {
 		fmt.Println("setting ledger")
 		bb.Ledger = ledger
-		bb.Ledger.mut = &sync.RWMutex{}
+		bb.Ledger.Mut = &sync.RWMutex{}
 	}
 
 	return bb
@@ -154,7 +154,7 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 }
 
 // reconciles forks, does not TRACK them
-func (bb *Broombase) getHighestBlock() (height int64, hash string, err error) {
+func (bb *Broombase) GetHighestBlock() (height int64, hash string, err error) {
 	bb.mut.RLock()
 	defer bb.mut.RUnlock()
 
@@ -368,8 +368,8 @@ func (bb *Broombase) StoreLedger(hash string, height int64) error {
 
 	fmt.Println("Storing ledger", height, hash)
 
-	bb.Ledger.mut.Lock()
-	defer bb.Ledger.mut.Unlock()
+	bb.Ledger.Mut.Lock()
+	defer bb.Ledger.Mut.Unlock()
 
 	data, err := json.Marshal(bb.Ledger)
 	if err != nil {
@@ -388,8 +388,8 @@ func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
 		return nil
 	}
 
-	bb.Ledger.mut.Lock()
-	defer bb.Ledger.mut.Unlock()
+	bb.Ledger.Mut.Lock()
+	defer bb.Ledger.Mut.Unlock()
 
 	fmt.Println("storage lock aquired")
 
@@ -404,8 +404,8 @@ func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
 
 func (bb *Broombase) GetLedgerAt(hash string, height int64) (*Ledger, bool) {
 
-	bb.Ledger.mut.RLock()
-	defer bb.Ledger.mut.RUnlock()
+	bb.Ledger.Mut.RLock()
+	defer bb.Ledger.Mut.RUnlock()
 
 	path := fmt.Sprintf("%s/%d_%s.broomledger", bb.ledgerDir, height, hash)
 	data, err := os.ReadFile(path)
@@ -430,8 +430,8 @@ func (bb *Broombase) GetLedgerAt(hash string, height int64) (*Ledger, bool) {
 // TODO: Validate Mining difficulty
 func (l *Ledger) ValidateBlock(block Block) error {
 
-	l.mut.RLock()
-	defer l.mut.RUnlock()
+	l.Mut.RLock()
+	defer l.Mut.RUnlock()
 
 	fmt.Println("lock aquired")
 
@@ -504,8 +504,8 @@ func (l *Ledger) ValidateBlock(block Block) error {
 }
 
 func (l *Ledger) GetAddressNonce(address string) (int64, bool) {
-	l.mut.RLock()
-	defer l.mut.RUnlock()
+	l.Mut.RLock()
+	defer l.Mut.RUnlock()
 
 	nonce, found := l.Nonces[address]
 
@@ -516,8 +516,8 @@ func (l *Ledger) GetAddressNonce(address string) (int64, bool) {
 }
 
 func (l *Ledger) GetAddressBalance(address string) (int64, bool) {
-	l.mut.RLock()
-	defer l.mut.RUnlock()
+	l.Mut.RLock()
+	defer l.Mut.RUnlock()
 
 	balance, found := l.Balances[address]
 
@@ -581,8 +581,8 @@ func (l *Ledger) ValidateCoinbaseTxn(coinbaseTxn Transaction, currentBlock int64
 
 // need to remove validity checking, assumes we have a valid block
 func (l *Ledger) Accumulate(b Block) {
-	l.mut.Lock()
-	defer l.mut.Unlock()
+	l.Mut.Lock()
+	defer l.Mut.Unlock()
 
 	// increment ledger
 	l.BlockHeight = b.Height
@@ -710,8 +710,8 @@ func (l *Ledger) _calculateNewMiningThreshold() string {
 }
 
 func (l *Ledger) GetCurrentMiningThreshold() string {
-	l.mut.RLock()
-	defer l.mut.RUnlock()
+	l.Mut.RLock()
+	defer l.Mut.RUnlock()
 
 	thresh := l.MiningThresholdHash
 
@@ -723,8 +723,8 @@ func (l *Ledger) CalculateCurrentReward() int {
 }
 
 func (l *Ledger) Clear() {
-	l.mut.Lock()
-	defer l.mut.Unlock()
+	l.Mut.Lock()
+	defer l.Mut.Unlock()
 	l.BlockHeight = -1
 	l.Balances = make(map[string]int64)
 	l.Nonces = make(map[string]int64)
@@ -741,8 +741,8 @@ func (l *Ledger) SyncNextBlock(validatedBlock Block) {
 }
 
 func (l *Ledger) CheckLedger(address string) (found bool, nonce int64, balance int64) {
-	l.mut.RLock()
-	defer l.mut.RUnlock()
+	l.Mut.RLock()
+	defer l.Mut.RUnlock()
 
 	nonce, found = l.Nonces[address]
 
@@ -789,7 +789,7 @@ func (bb *Broombase) ReceiveBlock(block Block) error {
 			return errors.New("Block has no associated ledger, we do not have previous")
 		}
 
-		ledger.mut = &sync.RWMutex{}
+		ledger.Mut = &sync.RWMutex{}
 
 		fmt.Println("LEDGER FOUND")
 		fmt.Println("ledger: ", ledger)
