@@ -29,23 +29,23 @@ type Executor struct {
 	mining      bool
 	controlChan chan struct{}
 
-	node     *Node
-	database *Broombase
+	Node     *Node
+	Database *Broombase
 
-	msgChan chan []byte
+	MsgChan chan []byte
 
-	blockChan   chan Block
-	txnChan     chan Transaction
-	mempool     map[string]Transaction
-	miningBlock *Block
+	BlockChan   chan Block
+	TxnChan     chan Transaction
+	Mempool     map[string]Transaction
+	MiningBlock *Block
 
 	address string
 	note    string
 
 	mux *http.ServeMux
 
-	egressBlockChan chan Block
-	egressTxnChan   chan Transaction
+	EgressBlockChan chan Block
+	EgressTxnChan   chan Transaction
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string) *Executor {
@@ -62,20 +62,20 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 	ex := &Executor{
 		controlChan: make(chan struct{}),
-		database:    bb,
+		Database:    bb,
 
-		msgChan: msgChannel,
+		MsgChan: msgChannel,
 
-		blockChan:   blockChan,
-		txnChan:     txnChan,
-		mempool:     mempool,
-		miningBlock: NewBlock(myAddress, miningNote, bb.ledger.BlockHash, bb.ledger.BlockHeight+1, int64(bb.ledger.CalculateCurrentReward())),
+		BlockChan:   blockChan,
+		TxnChan:     txnChan,
+		Mempool:     mempool,
+		MiningBlock: NewBlock(myAddress, miningNote, bb.Ledger.BlockHash, bb.Ledger.BlockHeight+1, int64(bb.Ledger.CalculateCurrentReward())),
 
 		address: myAddress,
 		note:    miningNote,
 
-		egressBlockChan: egressBlockChan,
-		egressTxnChan:   egressTxnChan,
+		EgressBlockChan: egressBlockChan,
+		EgressTxnChan:   egressTxnChan,
 	}
 
 	return ex
@@ -83,11 +83,11 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 func (ex *Executor) Start(workers int, self string, seeds ...string) {
 
-	ex.node = ActivateNode(ex.msgChan, ex.blockChan, ex.egressBlockChan, ex.txnChan, ex.egressTxnChan, self, seeds...)
+	ex.Node = ActivateNode(ex.MsgChan, ex.BlockChan, ex.EgressBlockChan, ex.TxnChan, ex.EgressTxnChan, self, seeds...)
 
 	if len(seeds) != 0 {
 		for {
-			if len(ex.node.GetAddressSample()) != 0 {
+			if len(ex.Node.GetAddressSample()) != 0 {
 				break
 			}
 			time.Sleep(1 * time.Second)
@@ -104,15 +104,15 @@ func (ex *Executor) Start(workers int, self string, seeds ...string) {
 	ex.NetworkSync(ctx)
 
 	// set backup schedule
-	ex.node.Schedule(func() {
+	ex.Node.Schedule(func() {
 		fmt.Println("runnning backup")
 		ex.RunBackup()
 		fmt.Println("backup done")
 	}, time.Second*BACKUP_FREQUENCY)
 
-	fmt.Println("escaped network sync height", ex.database.ledger.BlockHeight)
+	fmt.Println("escaped network sync height", ex.Database.Ledger.BlockHeight)
 
-	ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
+	ex.MiningBlock.Height = ex.Database.Ledger.BlockHeight + 1
 
 	fmt.Println("Node running")
 	ex.RunMiningLoop(ctx, workers)
@@ -145,9 +145,9 @@ func (ex *Executor) ResetMiningBlock() {
 	// ex.database.ledger = ledger
 
 	fmt.Println("Resetting mining block")
-	fmt.Println("block hash: ", ex.miningBlock.Hash)
+	fmt.Println("block hash: ", ex.MiningBlock.Hash)
 
-	ex.miningBlock = NewBlock(ex.address, ex.note, ex.database.ledger.BlockHash, ex.database.ledger.BlockHeight+1, int64(ex.database.ledger.CalculateCurrentReward()))
+	ex.MiningBlock = NewBlock(ex.address, ex.note, ex.Database.Ledger.BlockHash, ex.Database.Ledger.BlockHeight+1, int64(ex.Database.Ledger.CalculateCurrentReward()))
 }
 
 func (ex *Executor) NetworkSync(ctx context.Context) {
@@ -192,12 +192,12 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 
 	// what if multiple blocks are added during this operation; we loop the network sync until it returns out directly (return a bool)
 
-	height, _, err := ex.database.getHighestBlock()
+	height, _, err := ex.Database.getHighestBlock()
 	if err != nil {
 		panic(err)
 	}
 
-	peerHash, peerHeight, err := ex.node.SamplePeersHighestBlock()
+	peerHash, peerHeight, err := ex.Node.SamplePeersHighestBlock()
 	if err != nil {
 		// no pers I guess...
 		fmt.Println("No peer responses for highest hash, going solo")
@@ -216,7 +216,7 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 	ts := NewTempStorage("")
 
 	// get first block of the loop
-	peerMaxBlock, err := ex.node.RacePeersForValidBlock(peerHash, peerHeight)
+	peerMaxBlock, err := ex.Node.RacePeersForValidBlock(peerHash, peerHeight)
 	if err != nil {
 		panic(err)
 	}
@@ -237,14 +237,14 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		}
 
 		// do we have previous block?
-		_, found := ex.database.GetBlock(prev.PreviousBlockHash, prev.Height-1)
+		_, found := ex.Database.GetBlock(prev.PreviousBlockHash, prev.Height-1)
 		if found {
 			fmt.Println("block already exists in broombase")
 			break
 		}
 
 		// get previous block from network
-		prev, err = ex.node.RacePeersForValidBlock(prev.PreviousBlockHash, int(prev.Height)-1)
+		prev, err = ex.Node.RacePeersForValidBlock(prev.PreviousBlockHash, int(prev.Height)-1)
 		if err != nil {
 			panic(err)
 		}
@@ -254,7 +254,7 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		fmt.Println(prev)
 	}
 
-	ledger, found := ex.database.GetLedgerAt(prev.PreviousBlockHash, prev.Height-1)
+	ledger, found := ex.Database.GetLedgerAt(prev.PreviousBlockHash, prev.Height-1)
 	if !found {
 		panic("ledger should exist")
 		// err = ex.database.SyncLedger(prev.Height, prev.Hash)
@@ -263,8 +263,8 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		// }
 	} else {
 		fmt.Println("setting ledger")
-		ex.database.ledger = ledger
-		ex.database.ledger.mut = &sync.RWMutex{}
+		ex.Database.Ledger = ledger
+		ex.Database.Ledger.mut = &sync.RWMutex{}
 	}
 
 	// move temp blocks over
@@ -285,18 +285,18 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 			panic("cooked")
 		}
 
-		err = ex.database.ReceiveBlock(lowestBlock)
+		err = ex.Database.ReceiveBlock(lowestBlock)
 		if err != nil {
 			panic(err)
 		}
 
-		fmt.Println("ledger height: ", ex.database.ledger.BlockHeight)
+		fmt.Println("ledger height: ", ex.Database.Ledger.BlockHeight)
 
 		lowestHeightToSync++
 
 	}
 
-	fmt.Println("final sync ledger height: ", ex.database.ledger.BlockHeight)
+	fmt.Println("final sync ledger height: ", ex.Database.Ledger.BlockHeight)
 
 	return
 
@@ -309,7 +309,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 	doneChan := make(chan struct{})
 
-	ex.Mine(ctx, ex.blockChan, doneChan, workers)
+	ex.Mine(ctx, ex.BlockChan, doneChan, workers)
 	fmt.Println("mining started")
 
 	// every 10 min without a block check up and sync
@@ -328,31 +328,31 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			syncRequired := ex.NetworkSyncWithTracker(ctx)
 			if syncRequired {
 
-				ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
+				ex.MiningBlock.Height = ex.Database.Ledger.BlockHeight + 1
 				//clear the mempool, we had to sync and don't know what txns are added or not added
-				ex.mempool = make(map[string]Transaction)
+				ex.Mempool = make(map[string]Transaction)
 			} else {
 				// I may be tracking a higher fork but not using it
 				fmt.Println("checking for fork disparity")
-				height, hash, err := ex.database.getHighestBlock()
+				height, hash, err := ex.Database.getHighestBlock()
 				if err != nil {
 					panic("must be able to get highets block")
 				}
 
-				if height > ex.database.ledger.BlockHeight {
+				if height > ex.Database.Ledger.BlockHeight {
 					fmt.Println("fixing height disparity")
-					ledger, found := ex.database.GetLedgerAt(hash, height)
+					ledger, found := ex.Database.GetLedgerAt(hash, height)
 					if found {
-						ex.database.ledger.mut.Lock()
-						ledger.mut = ex.database.ledger.mut
+						ex.Database.Ledger.mut.Lock()
+						ledger.mut = ex.Database.Ledger.mut
 						fmt.Println("setting ledger")
-						ex.database.ledger = ledger
-						ex.database.ledger.mut.Unlock()
+						ex.Database.Ledger = ledger
+						ex.Database.Ledger.mut.Unlock()
 
 						// clear our mempool
-						ex.mempool = make(map[string]Transaction)
+						ex.Mempool = make(map[string]Transaction)
 						// set out mining block height
-						ex.miningBlock.Height = ex.database.ledger.BlockHeight + 1
+						ex.MiningBlock.Height = ex.Database.Ledger.BlockHeight + 1
 
 					}
 
@@ -364,12 +364,12 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			doneChan = make(chan struct{})
 
 			fmt.Println("sync done")
-			ex.Mine(ctx, ex.blockChan, doneChan, workers)
+			ex.Mine(ctx, ex.BlockChan, doneChan, workers)
 
 			// send dead block to start mining again
-		case block := <-ex.blockChan:
+		case block := <-ex.BlockChan:
 
-			currentSolution := ex.database.ledger.BlockHeight+1 == block.Height && ex.database.ledger.BlockHash == block.PreviousBlockHash
+			currentSolution := ex.Database.Ledger.BlockHeight+1 == block.Height && ex.Database.Ledger.BlockHash == block.PreviousBlockHash
 
 			// stop mining, handle block validation and storage, start mining again
 			fmt.Println("incoming block (network or self)")
@@ -377,35 +377,35 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			fmt.Println(block.Height)
 			fmt.Println("hash: ", block.Hash)
 			fmt.Println("prev: ", block.PreviousBlockHash)
-			err := ex.database.ReceiveBlock(block)
+			err := ex.Database.ReceiveBlock(block)
 			if err != nil {
 				fmt.Println("Block invalid: ", err)
 
 			} else {
 
 				// share the block with the egress
-				ex.egressBlockChan <- block
+				ex.EgressBlockChan <- block
 
 				// no error
 				if currentSolution {
 					fmt.Println("block is current ledger solution")
 					// smart clear the mempool because we might have valid txns not included in the block
 					for txnSig := range block.Transactions {
-						delete(ex.mempool, txnSig)
+						delete(ex.Mempool, txnSig)
 					}
 					// if this skips and syncs forward we may have txns we try to put in that are already in the chain
 
 					ex.ResetMiningBlock()
 
 					// copy remaining txns in the mempool into the new block
-					maps.Copy(ex.miningBlock.Transactions, ex.mempool)
+					maps.Copy(ex.MiningBlock.Transactions, ex.Mempool)
 				}
 
 			}
 
 			doneChan = make(chan struct{})
-			ex.Mine(ctx, ex.blockChan, doneChan, workers)
-		case txn := <-ex.txnChan:
+			ex.Mine(ctx, ex.BlockChan, doneChan, workers)
+		case txn := <-ex.TxnChan:
 			// stop mining, add txn to block, handle block validation, start mining again
 			fmt.Println("incoming network txn")
 			close(doneChan)
@@ -423,10 +423,10 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 				//TODO: validate nonce and balance against current ledger
 
 				fmt.Println("txn from", txn.From)
-				accountBalance, balanceFound := ex.database.ledger.GetAddressBalance(txn.From)
+				accountBalance, balanceFound := ex.Database.Ledger.GetAddressBalance(txn.From)
 				fmt.Println("account balance", accountBalance)
 
-				accountNonce, _ := ex.database.ledger.GetAddressNonce(txn.From)
+				accountNonce, _ := ex.Database.Ledger.GetAddressNonce(txn.From)
 				fmt.Println("txn nonce:", txn.Nonce)
 
 				if balanceFound {
@@ -443,11 +443,11 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 					} else {
 						fmt.Println("adding txn to block, mempool, and sending out")
 						// egress the txn
-						ex.egressTxnChan <- txn
+						ex.EgressTxnChan <- txn
 
 						// we found a good txn, add it to the mempool
-						ex.mempool[txn.Sig] = txn
-						ex.miningBlock.Add(txn)
+						ex.Mempool[txn.Sig] = txn
+						ex.MiningBlock.Add(txn)
 					}
 				} else {
 					fmt.Println("could not find balance and nonce")
@@ -456,7 +456,7 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 			}
 
 			doneChan = make(chan struct{})
-			ex.Mine(ctx, ex.blockChan, doneChan, workers)
+			ex.Mine(ctx, ex.BlockChan, doneChan, workers)
 
 		}
 
@@ -466,14 +466,14 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 func (ex *Executor) Mine(ctx context.Context, solutionChan chan Block, doneChan chan struct{}, workers int) {
 
-	ex.miningBlock.MineWithWorkers(ctx, ex.database.ledger.MiningThresholdHash, workers, solutionChan, doneChan)
+	ex.MiningBlock.MineWithWorkers(ctx, ex.Database.Ledger.MiningThresholdHash, workers, solutionChan, doneChan)
 }
 
 func (ex *Executor) getAddressTransactions(address string) []Transaction {
 
 	var addressTxns []Transaction
 
-	for _, txn := range ex.miningBlock.Transactions {
+	for _, txn := range ex.MiningBlock.Transactions {
 		if txn.From == address {
 			addressTxns = append(addressTxns, txn)
 		}
@@ -509,7 +509,7 @@ func (ex *Executor) server_Root() {
 }
 
 func (ex *Executor) server_Difficulty() {
-	thresh := ex.database.ledger.GetCurrentMiningThreshold()
+	thresh := ex.Database.Ledger.GetCurrentMiningThreshold()
 	ex.mux.Handle("/difficulty", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(thresh))
 	}))
@@ -529,7 +529,7 @@ func (ex *Executor) server_GetBlock() {
 			return
 		}
 
-		block, found := ex.database.GetBlock(p.Hash, int64(p.Height))
+		block, found := ex.Database.GetBlock(p.Hash, int64(p.Height))
 		if !found {
 			http.Error(w, "block not found", 404)
 			return
@@ -560,7 +560,7 @@ func (ex *Executor) server_GetAddressDetails() {
 
 		var res Response
 
-		found, nonce, balance := ex.database.ledger.CheckLedger(p.Address)
+		found, nonce, balance := ex.Database.Ledger.CheckLedger(p.Address)
 		if !found {
 			http.Error(w, "address details not found", 404)
 			return
@@ -601,7 +601,7 @@ func (ex *Executor) server_PostTransaction() {
 		fmt.Println("Txn headers validated")
 
 		// ingress txn
-		ex.txnChan <- txn
+		ex.TxnChan <- txn
 		w.Write([]byte("ok"))
 
 	}))
@@ -617,7 +617,7 @@ func (ex *Executor) server_PostBlock() {
 		}
 
 		// ingress txn
-		ex.blockChan <- block
+		ex.BlockChan <- block
 		w.Write([]byte("ok"))
 
 	}))
@@ -628,7 +628,7 @@ func (ex *Executor) server_HighestBlock() {
 
 		var hh HashHeight
 
-		height, hash, err := ex.database.getHighestBlock()
+		height, hash, err := ex.Database.getHighestBlock()
 		if err != nil {
 			http.Error(w, "highest block not found", 404)
 			return
@@ -653,7 +653,7 @@ func (ex *Executor) server_Msg() {
 			http.Error(w, "bad msg", 400)
 			return
 		}
-		ex.msgChan <- msg
+		ex.MsgChan <- msg
 
 		w.Write([]byte("Thank you for the msg!"))
 
@@ -746,11 +746,11 @@ func (ex *Executor) RunBackup() error {
 
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
-	ex.database.mut.Lock()
-	defer ex.database.mut.Unlock()
+	ex.Database.mut.Lock()
+	defer ex.Database.mut.Unlock()
 	dirs := []string{
-		ex.database.ledgerDir,
-		ex.database.dir,
+		ex.Database.ledgerDir,
+		ex.Database.dir,
 	}
 
 	for _, dir := range dirs {

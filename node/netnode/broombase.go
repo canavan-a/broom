@@ -29,7 +29,7 @@ type Broombase struct {
 	mut       sync.RWMutex
 	dir       string
 	ledgerDir string
-	ledger    *Ledger
+	Ledger    *Ledger
 }
 
 type PendingBalance struct {
@@ -73,7 +73,7 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 
 	bb := &Broombase{
 		mut: sync.RWMutex{},
-		ledger: &Ledger{
+		Ledger: &Ledger{
 			mut:                 &sync.RWMutex{},
 			MiningThresholdHash: DEFAULT_MINING_THRESHOLD,
 			BlockHeight:         0,
@@ -145,8 +145,8 @@ func InitBroombaseWithDir(dir, ledgerDir string) *Broombase {
 		}
 	} else {
 		fmt.Println("setting ledger")
-		bb.ledger = ledger
-		bb.ledger.mut = &sync.RWMutex{}
+		bb.Ledger = ledger
+		bb.Ledger.mut = &sync.RWMutex{}
 	}
 
 	return bb
@@ -255,7 +255,7 @@ func (bb *Broombase) AddAndSync(block *Block) error {
 	}
 
 	// SLOW HERE
-	if bb.ledger.BlockHeight < block.Height {
+	if bb.Ledger.BlockHeight < block.Height {
 		fmt.Println("syncing ledger")
 		err = bb.SyncLedger(block.Height, block.Hash)
 		if err != nil {
@@ -307,7 +307,7 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 	startBlockHash := blockHash
 
 	//clear ledger (can't sync with old data)
-	bb.ledger.Clear()
+	bb.Ledger.Clear()
 
 	// keep as much data not in memory as possible
 	type heightHashTime struct {
@@ -342,10 +342,10 @@ func (bb *Broombase) SyncLedger(blockHeight int64, blockHash string) error {
 		}
 
 		if block.Height != GENESIS_BLOCK_HEIGHT { // DO NOT VALIDATE GENESIS BLOCK
-			bb.ledger.ValidateBlock(block)
+			bb.Ledger.ValidateBlock(block)
 		}
 
-		bb.ledger.Accumulate(block)
+		bb.Ledger.Accumulate(block)
 	}
 
 	err := bb.StoreLedger(startBlockHash, startBlockHeight)
@@ -368,10 +368,10 @@ func (bb *Broombase) StoreLedger(hash string, height int64) error {
 
 	fmt.Println("Storing ledger", height, hash)
 
-	bb.ledger.mut.Lock()
-	defer bb.ledger.mut.Unlock()
+	bb.Ledger.mut.Lock()
+	defer bb.Ledger.mut.Unlock()
 
-	data, err := json.Marshal(bb.ledger)
+	data, err := json.Marshal(bb.Ledger)
 	if err != nil {
 		return err
 	}
@@ -388,8 +388,8 @@ func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
 		return nil
 	}
 
-	bb.ledger.mut.Lock()
-	defer bb.ledger.mut.Unlock()
+	bb.Ledger.mut.Lock()
+	defer bb.Ledger.mut.Unlock()
 
 	fmt.Println("storage lock aquired")
 
@@ -404,8 +404,8 @@ func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
 
 func (bb *Broombase) GetLedgerAt(hash string, height int64) (*Ledger, bool) {
 
-	bb.ledger.mut.RLock()
-	defer bb.ledger.mut.RUnlock()
+	bb.Ledger.mut.RLock()
+	defer bb.Ledger.mut.RUnlock()
 
 	path := fmt.Sprintf("%s/%d_%s.broomledger", bb.ledgerDir, height, hash)
 	data, err := os.ReadFile(path)
@@ -760,15 +760,15 @@ func (bb *Broombase) ReceiveBlock(block Block) error {
 	}
 
 	// check if it solves current puzzle
-	if bb.ledger.BlockHeight+1 == block.Height && bb.ledger.BlockHash == block.PreviousBlockHash {
+	if bb.Ledger.BlockHeight+1 == block.Height && bb.Ledger.BlockHash == block.PreviousBlockHash {
 		// this is the next block
 
-		err := bb.ledger.ValidateBlock(block)
+		err := bb.Ledger.ValidateBlock(block)
 		if err != nil {
 			return err
 		}
 		// my current ledger should be up to date
-		bb.ledger.SyncNextBlock(block)
+		bb.Ledger.SyncNextBlock(block)
 
 		err = bb.StoreLedger(block.Hash, block.Height)
 		if err != nil {

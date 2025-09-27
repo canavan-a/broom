@@ -47,11 +47,11 @@ func TestFork(t *testing.T) {
 func WaitForBlock(blockHeight int, ex *Executor) {
 
 	for {
-		blockHash, found := ex.database.GetFirstBlockByHeight(blockHeight)
+		blockHash, found := ex.Database.GetFirstBlockByHeight(blockHeight)
 		if found {
 			fmt.Println("FOUND 3", blockHash)
 
-			block, found := ex.database.GetBlock(blockHash, int64(blockHeight))
+			block, found := ex.Database.GetBlock(blockHash, int64(blockHeight))
 			if !found {
 				panic("block not found, but previously found")
 			}
@@ -68,7 +68,7 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 			fmt.Println(solution)
 
 			time.Sleep(4 * time.Second)
-			ex.database.ReceiveBlock(solution)
+			ex.Database.ReceiveBlock(solution)
 
 			blockChanLocal = make(chan Block)
 			doneChanLocal = make(chan struct{})
@@ -81,7 +81,7 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 			solution2 := <-blockChanLocal
 			close(doneChanLocal)
 
-			ex.database.ReceiveBlock(solution2)
+			ex.Database.ReceiveBlock(solution2)
 
 			blockChanLocal = make(chan Block)
 			doneChanLocal = make(chan struct{})
@@ -94,7 +94,7 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 			solution3 := <-blockChanLocal
 			close(doneChanLocal)
 
-			ex.database.ReceiveBlock(solution3)
+			ex.Database.ReceiveBlock(solution3)
 
 			return
 		}

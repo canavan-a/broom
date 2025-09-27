@@ -4,7 +4,7 @@ A distributed ledger written in Go based loosely on the Satoshi Nakamotot bitcoi
 
 ## Quickstart
 
-Install the latest wallet and node usin this command.
+Install the latest wallet and node using this command.
 
 ```bash
 curl -sSL https://broomledger.com/install.sh | sudo bash

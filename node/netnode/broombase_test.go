@@ -120,7 +120,7 @@ func TestMinePoW(t *testing.T) {
 
 	bb := InitBroombaseWithDir("broombase_test", "ledger_test")
 
-	if bb.ledger.Balances[GENESIS_TXN.To] != STARTING_PAYOUT {
+	if bb.Ledger.Balances[GENESIS_TXN.To] != STARTING_PAYOUT {
 
 		// t.Fail()
 		// return
@@ -143,7 +143,7 @@ func TestMinePoW(t *testing.T) {
 
 	myAddress := txn.From
 
-	block := NewBlock(myAddress, "test mining a block!", bb.ledger.BlockHash, bb.ledger.BlockHeight+1, int64(bb.ledger.CalculateCurrentReward()))
+	block := NewBlock(myAddress, "test mining a block!", bb.Ledger.BlockHash, bb.Ledger.BlockHeight+1, int64(bb.Ledger.CalculateCurrentReward()))
 	block.Add(txn)
 
 	done := make(chan struct{})
@@ -161,7 +161,7 @@ func TestMinePoW(t *testing.T) {
 	fmt.Println("Completed")
 	fmt.Println(sol.Hash)
 
-	err = bb.ledger.ValidateBlock(sol)
+	err = bb.Ledger.ValidateBlock(sol)
 	if err != nil {
 		fmt.Println("FAILED TO VALIDATE BLOCK")
 		fmt.Println(err.Error())
@@ -188,12 +188,12 @@ func TestMinePoW(t *testing.T) {
 	}
 
 	fmt.Println("block added to ledger:")
-	fmt.Println(bb.ledger.BlockHash)
-	fmt.Println(bb.ledger.BlockHeight)
+	fmt.Println(bb.Ledger.BlockHash)
+	fmt.Println(bb.Ledger.BlockHeight)
 	fmt.Println("Balances: ")
-	fmt.Println(bb.ledger.Balances)
-	fmt.Println(bb.ledger.Nonces)
-	fmt.Println(bb.ledger.Pending)
+	fmt.Println(bb.Ledger.Balances)
+	fmt.Println(bb.Ledger.Nonces)
+	fmt.Println(bb.Ledger.Pending)
 
 }
 
