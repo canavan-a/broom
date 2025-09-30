@@ -29,9 +29,9 @@ const WALLET_FILENAME = "walletconfig.broom"
 
 const WALLET_DATA_FILENAME = "walletdata.broom"
 
-const CONVERSION_RATE_FORWARD = 436_634
+const CONVERSION_RATE_FORWARD = 100_000
 
-const CONVERSION_RATE_BACKWARDS = 436_634.0
+const CONVERSION_RATE_BACKWARDS = 100_000.0
 
 type WalletTransaction struct {
 	netnode.Transaction

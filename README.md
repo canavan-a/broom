@@ -80,9 +80,9 @@ The ledger is backed by Ed25519 Elliptic curve key signiatures for all cryptogra
 
 The block reward is 10,000 Broom Ledger Token (BLT). This is the basis token for the ledger. When transacting token, the values are in Meridian.
 
-$$ 1 Meridian = 436,634 BLT $$
+$$ 1 Meridian = 100,000 BLT $$
 
-With the block target of 60 seconds, the result is `33` meridian mined every day.
+With the block target of 60 seconds, the result is `144` meridian mined every day.
 
 ## Node messaging protocol
 
