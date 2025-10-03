@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -46,6 +47,8 @@ type Executor struct {
 
 	EgressBlockChan chan Block
 	EgressTxnChan   chan Transaction
+
+	Port string
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string) *Executor {
@@ -79,6 +82,20 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	}
 
 	return ex
+}
+
+func (ex *Executor) SetPort(port string) {
+
+	if port == "" {
+		ex.Port = EXPOSED_PORT
+	}
+
+	_, err := strconv.Atoi(port)
+	if err != nil {
+		panic(err)
+	}
+
+	ex.Port = port
 }
 
 func (ex *Executor) Start(workers int, self string, seeds ...string) {
@@ -495,8 +512,14 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_Backup()
 
 	go func() {
-		fmt.Println("Starting HTTP server on port", EXPOSED_PORT)
-		if err := http.ListenAndServe(":"+EXPOSED_PORT, ex.mux); err != nil {
+
+		port := ex.Port
+		if port == "" {
+			port = EXPOSED_PORT
+		}
+
+		fmt.Println("Starting HTTP server on port", port)
+		if err := http.ListenAndServe(":"+port, ex.mux); err != nil {
 			fmt.Println("HTTP server failed:", err)
 		}
 	}()

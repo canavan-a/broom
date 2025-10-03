@@ -25,6 +25,7 @@ type Config struct {
 	Note    string   `json:"note"`
 	Seeds   []string `json:"seeds"`
 	ID      string   `json:"id"` //  this is your public url
+	Port    string   `json:"port"`
 }
 
 func NewCli() *Cli {
@@ -74,7 +75,7 @@ func (cli *Cli) WriteConfig(cfg Config) error {
 	return nil
 }
 
-func (cli *Cli) EditConfig(note, address, id string, seeds ...string) {
+func (cli *Cli) EditConfig(note, address, id string, port string, seeds ...string) {
 
 	if id != "" {
 		cli.config.ID = id
@@ -86,6 +87,10 @@ func (cli *Cli) EditConfig(note, address, id string, seeds ...string) {
 
 	if address != "" {
 		cli.config.Address = address
+	}
+
+	if port != "" {
+		cli.config.Port = port
 	}
 
 	cli.config.Seeds = append(cli.config.Seeds, seeds...)
@@ -146,6 +151,12 @@ func (cli *Cli) Run() {
 				wrkrs, err := strconv.Atoi(args[2])
 				if err == nil && wrkrs != 0 {
 					fmt.Printf("Starting with %d workers.\n", wrkrs)
+					p := "80"
+					if cli.config.Port != "" {
+						p = cli.config.Port
+					}
+					fmt.Printf("starting server on port %s\n", p)
+					cli.ex.SetPort(p)
 					cli.ex.Start(wrkrs, cli.config.ID, cli.config.Seeds...)
 				}
 			} else {
@@ -191,22 +202,25 @@ func (cli *Cli) Run() {
 func (cli *Cli) DoConfig(s []string) {
 	switch s[0] {
 	case "address":
-		cli.EditConfig("", s[1], "")
+		cli.EditConfig("", s[1], "", "")
 	case "note":
-		cli.EditConfig(s[1], "", "")
+		cli.EditConfig(s[1], "", "", "")
 	case "seeds":
 		if s[1] == "clear" {
 			cli.ClearSeeds()
 		} else {
-			cli.EditConfig("", "", "", s[1:]...)
+			cli.EditConfig("", "", "", "", s[1:]...)
 		}
 	case "id":
-		cli.EditConfig("", "", s[1])
+		cli.EditConfig("", "", s[1], "")
+	case "port":
+		cli.EditConfig("", "", "", s[1])
 	case "show":
 		fmt.Println("Address: ", cli.config.Address)
 		fmt.Println("Note: ", cli.config.Note)
 		fmt.Println("Seeds: ", cli.config.Seeds)
 		fmt.Println("Id: ", cli.config.ID)
+		fmt.Println("Port: ", cli.config.Port)
 	default:
 		fmt.Println("options: address, note, show")
 	}
