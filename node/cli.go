@@ -192,11 +192,34 @@ func (cli *Cli) Run() {
 			fmt.Println("file: ", args[2])
 			cli.ex.BackupFromFile(args[2])
 		}
-
+	case "help":
+		cmdHelp()
 	default:
-		fmt.Println("invalid command")
+		fmt.Printf("Error: %v\n", args[0])
+		fmt.Println("Invalid command")
+		fmt.Println("Run 'broom help' for commands.")
 	}
 
+}
+
+func cmdHelp() {
+	fmt.Println("Configuration Commands run 'broom config':\n",
+		"\t--address\n",
+		"\t--note\n",
+		"\t--seeds\n",
+		"\t--id\n",
+		"\t--port\n",
+		"\t--show\n",
+		"\n\n",
+		"Starting workers run 'broom start' add number of workers:\n",
+		"\tadd a number for how many workers you want.\n",
+		"\te.g. '--1'\n",
+		"\n\n",
+		"Backing Up run 'broom backup':\n",
+		"\t--run\n",
+		"\t--peer\n",
+		"\t--file\n",
+	)
 }
 
 func (cli *Cli) DoConfig(s []string) {
