@@ -135,6 +135,7 @@ func (cli *Cli) Run() {
 
 	if len(args) < 1 {
 		fmt.Println("expected subcommand")
+		fmt.Println("run: 'broom help' for valid sub commands")
 		return
 	}
 
@@ -204,22 +205,21 @@ func (cli *Cli) Run() {
 
 func cmdHelp() {
 	fmt.Println("Configuration Commands run 'broom config':\n",
-		"\t--address\n",
-		"\t--note\n",
-		"\t--seeds\n",
-		"\t--id\n",
-		"\t--port\n",
-		"\t--show\n",
+		"\taddress\n",
+		"\tnote\n",
+		"\tseeds\n",
+		"\tid\n",
+		"\tport\n",
+		"\tshow\n",
 		"\n\n",
-		"Starting workers run 'broom start' add number of workers:\n",
+		"Starting workers run 'broom start':\n",
 		"\tadd a number for how many workers you want.\n",
-		"\te.g. '--1'\n",
+		"\te.g. 'workers 2'\n",
 		"\n\n",
 		"Backing Up run 'broom backup':\n",
-		"\t--run\n",
-		"\t--peer\n",
-		"\t--file\n",
-	)
+		"\trun\n",
+		"\tpeer\n",
+		"\tfile")
 }
 
 func (cli *Cli) DoConfig(s []string) {

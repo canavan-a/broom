@@ -202,6 +202,10 @@ Where `T` is the target time gap `60s`.
 
 base comand: `broom`
 
+### help
+
+`broom help`: lists out possible command options stated below.  
+
 ### config
 
 `broom config address {address}`: sets address the mining rewards should be deposited to.
