@@ -223,6 +223,7 @@ func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
 	for _, ip := range tooManyStrikes {
 
 		n.banList[ip] = true
+		n.ScheduleUnbanPeer(ip)
 		delete(n.requestPeers, ip)
 	}
 }
