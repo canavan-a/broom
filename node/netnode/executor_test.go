@@ -14,6 +14,7 @@ func TestExecutor(t *testing.T) {
 		"hello",
 		"",
 		"",
+		"none",
 	)
 
 	ex.RunMiningLoop(t.Context(), 1)
@@ -36,6 +37,7 @@ func TestFork(t *testing.T) {
 		"hello",
 		broombaseDir,
 		ledgerDir,
+		"none",
 	)
 
 	go ex.RunMiningLoop(t.Context(), 1)

@@ -38,7 +38,7 @@ func NewCli() *Cli {
 }
 
 func (cli *Cli) initExecutor() {
-	cli.ex = netnode.NewExecutor(cli.config.Address, cli.config.Note, "", "")
+	cli.ex = netnode.NewExecutor(cli.config.Address, cli.config.Note, "", "", Version)
 }
 
 func (cli *Cli) LoadConfig() {
@@ -142,6 +142,8 @@ func (cli *Cli) Run() {
 	switch args[0] {
 	case "config":
 		cli.DoConfig(args[1:])
+	case "version":
+		fmt.Println(Version)
 	case "start":
 		if !cli.ValidateFlags() {
 			return
@@ -219,7 +221,9 @@ func cmdHelp() {
 		"Backing Up run 'broom backup':\n",
 		"\trun\n",
 		"\tpeer\n",
-		"\tfile")
+		"\tfile\n",
+		"\tCheck node version: \n",
+		"\tversion")
 }
 
 func (cli *Cli) DoConfig(s []string) {

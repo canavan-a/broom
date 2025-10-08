@@ -22,18 +22,18 @@ jobs:
               working-directory: ./node
               run: |
                   VERSION=${GITHUB_REF#refs/tags/}
-                  GOOS=linux GOARCH=amd64 go build -o ../release/broom-$VERSION-amd64 .
-                  GOOS=linux GOARCH=arm64 go build -o ../release/broom-$VERSION-arm64 .
-                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../release/broom-$VERSION-armv7 .
+                  GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=$VERSION" -o ../release/broom-$VERSION-amd64 .
+                  GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=$VERSION" -o ../release/broom-$VERSION-arm64 .
+                  GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-X main.Version=$VERSION" -o ../release/broom-$VERSION-armv7 .
 
             # Build Wallet binaries
             - name: Build Wallet
               working-directory: ./wallet
               run: |
                   VERSION=${GITHUB_REF#refs/tags/}
-                  GOOS=linux GOARCH=amd64 go build -o ../release/wallet-$VERSION-amd64 .
-                  GOOS=linux GOARCH=arm64 go build -o ../release/wallet-$VERSION-arm64 .
-                  GOOS=linux GOARCH=arm GOARM=7 go build -o ../release/wallet-$VERSION-armv7 .
+                  GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=$VERSION" -o ../release/wallet-$VERSION-amd64 .
+                  GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=$VERSION" -o ../release/wallet-$VERSION-arm64 .
+                  GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-X main.Version=$VERSION" -o ../release/wallet-$VERSION-armv7 .
 
             # Upload all binaries to GitHub release
             - name: Release

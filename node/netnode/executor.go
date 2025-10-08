@@ -27,6 +27,8 @@ const BACKUP_DIR = "backup"
 const BACKUP_FREQUENCY = 2 * 60 * 60 // every 2 hours
 
 type Executor struct {
+	version string
+
 	mining      bool
 	controlChan chan struct{}
 
@@ -51,7 +53,7 @@ type Executor struct {
 	Port string
 }
 
-func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string) *Executor {
+func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string, version string) *Executor {
 
 	bb := InitBroombaseWithDir(dir, ledgerDir)
 	blockChan := make(chan Block, CHANNEL_BUFFER_SIZE)
@@ -64,6 +66,8 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 	msgChannel := make(chan []byte, CHANNEL_BUFFER_SIZE)
 
 	ex := &Executor{
+		version: version,
+
 		controlChan: make(chan struct{}),
 		Database:    bb,
 
@@ -510,6 +514,7 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_HighestBlock()
 	ex.server_Msg()
 	ex.server_Backup()
+	ex.server_Version()
 
 	go func() {
 
@@ -525,9 +530,15 @@ func (ex *Executor) SetupHttpServer() {
 	}()
 }
 
+func (ex *Executor) server_Version() {
+	ex.mux.Handle("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("I am a node. Please add me to your seed list :)"))
+	}))
+}
+
 func (ex *Executor) server_Root() {
 	ex.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("I am a node. Please add me to your seed list :)"))
+		w.Write([]byte(ex.version))
 	}))
 }
 

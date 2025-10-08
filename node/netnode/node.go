@@ -74,6 +74,8 @@ type Node struct {
 	egressTxn   chan Transaction
 
 	requestPeers map[string]*RequestPeer
+
+	banList map[string]bool
 }
 
 type RequestPeer struct {
@@ -96,6 +98,8 @@ func ActivateNode(msgChannel chan []byte, ingressBlock, egressBlock chan Block, 
 		egressBlock:  egressBlock,
 		egressTxn:    egressTxn,
 		requestPeers: make(map[string]*RequestPeer),
+
+		banList: make(map[string]bool),
 	}
 
 	// seed the supplied node ips
@@ -168,6 +172,12 @@ func (n *Node) addPeerFromHost(host string) {
 
 	n.mutex.Lock()
 	defer n.mutex.Unlock()
+
+	if n.banList[host] {
+		// skip adding the peer back
+		return
+	}
+
 	n.requestPeers[host] = &RequestPeer{
 		ip: host,
 	}
@@ -211,8 +221,19 @@ func (n *Node) broadcastMessageToPeers(rawMsg []byte) {
 	}
 
 	for _, ip := range tooManyStrikes {
+
+		n.banList[ip] = true
 		delete(n.requestPeers, ip)
 	}
+}
+
+func (n *Node) ScheduleUnbanPeer(peer string) {
+	go func() {
+		time.Sleep(15 * time.Minute)
+		n.mutex.Lock()
+		defer n.mutex.Unlock()
+		n.banList[peer] = false
+	}()
 }
 
 func (r *RequestPeer) SendMsg(msg []byte) error {

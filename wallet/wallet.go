@@ -81,6 +81,8 @@ func (w *Wallet) Run() {
 	args := flag.Args()
 
 	switch args[0] {
+	case "version":
+		fmt.Println(Version)
 	case "init":
 		if !w.AreYouSure("init, this will overwrite existing keys") {
 			return
