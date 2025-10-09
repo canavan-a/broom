@@ -532,13 +532,13 @@ func (ex *Executor) SetupHttpServer() {
 
 func (ex *Executor) server_Version() {
 	ex.mux.Handle("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("I am a node. Please add me to your seed list :)"))
+		w.Write([]byte(ex.version))
 	}))
 }
 
 func (ex *Executor) server_Root() {
 	ex.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(ex.version))
+		w.Write([]byte("I am a node. Please add me to your seed list :"))
 	}))
 }
 
