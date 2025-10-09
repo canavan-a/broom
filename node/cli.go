@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -142,6 +143,14 @@ func (cli *Cli) Run() {
 	switch args[0] {
 	case "config":
 		cli.DoConfig(args[1:])
+	case "update":
+		cli.AreYouSure("update")
+		cmd := exec.Command("bash", "-c", "curl -sSL https://broomledger.com/install.sh | sudo bash")
+		out, err := cmd.CombinedOutput()
+		fmt.Println(string(out))
+		if err != nil {
+			panic(err)
+		}
 	case "version":
 		fmt.Println(Version)
 	case "start":
