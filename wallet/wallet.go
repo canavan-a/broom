@@ -89,6 +89,9 @@ func (w *Wallet) Run() {
 		}
 		w.CliInit()
 	case "sync":
+		if w.ConfirmSeedList() != nil {
+			return
+		}
 		w.SyncBalance()
 		fmt.Println("balance synced")
 		fmt.Printf("Balance: %.4f\n", float64(w.Balance)/CONVERSION_RATE_BACKWARDS)
@@ -101,6 +104,9 @@ func (w *Wallet) Run() {
 			fmt.Printf(">> %.4f\n", float64(txn.Amount)/CONVERSION_RATE_BACKWARDS)
 		}
 	case "balance":
+		if w.ConfirmSeedList() != nil {
+			return
+		}
 		fmt.Println("Run sync to update network")
 		fmt.Printf("Balance: %.4f\n", float64(w.Balance)/CONVERSION_RATE_BACKWARDS)
 	case "address":
@@ -110,6 +116,9 @@ func (w *Wallet) Run() {
 		}
 		fmt.Println(key)
 	case "send":
+		if w.ConfirmSeedList() != nil {
+			return
+		}
 		w.Send()
 		fmt.Println("Send Broom")
 
@@ -188,6 +197,17 @@ func (w *Wallet) SaveSeeds() {
 	if err != nil {
 		panic("could not back up seeds")
 	}
+}
+
+func (w *Wallet) ConfirmSeedList() error {
+	if len(w.Seeds) == 0 {
+		fmt.Println("No seeds supplied run:")
+		fmt.Println("\t sudo wallet seeds add node.broomledger.com")
+
+		return errors.New("no seeds supplied")
+	}
+
+	return nil
 }
 
 func (w *Wallet) SyncBalance() error {
