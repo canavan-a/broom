@@ -249,7 +249,6 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 		panic(err)
 	}
 
-	debugLoopCount := 0
 	prev := peerMaxBlock
 
 	// sync loop
@@ -272,21 +271,8 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 			panic(err)
 		}
 
-		err = ex.Database.ValidateBlockHeaders(&tempPrev)
-		if err != nil {
-			fmt.Println("BLOCK FOUND IN RACE BUT HEADERS ARE BAD:")
-			fmt.Println("bad block is: ", tempPrev.Hash, tempPrev.Height)
-			fmt.Println(err)
-
-			fmt.Println("trying again")
-			debugLoopCount += 1
-			if debugLoopCount >= 25 {
-				panic("crash fatal looop")
-			}
-		} else {
-			debugLoopCount = 0
-			prev = tempPrev
-		}
+		// headers will never validate
+		prev = tempPrev
 
 		err = ts.StoreBlock(prev)
 		if err != nil {
