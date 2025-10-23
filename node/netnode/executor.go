@@ -513,6 +513,7 @@ func (ex *Executor) GetAddressTransactions(address string) []Transaction {
 
 func (ex *Executor) SetupHttpServer() {
 	ex.mux = http.NewServeMux()
+
 	ex.server_Root()
 	ex.server_Difficulty()
 	ex.server_GetBlock()
@@ -524,6 +525,8 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_Backup()
 	ex.server_Version()
 
+	handler := corsMiddleware(ex.mux)
+
 	go func() {
 
 		port := ex.Port
@@ -532,10 +535,25 @@ func (ex *Executor) SetupHttpServer() {
 		}
 
 		fmt.Println("Starting HTTP server on port", port)
-		if err := http.ListenAndServe(":"+port, ex.mux); err != nil {
+		if err := http.ListenAndServe(":"+port, handler); err != nil {
 			fmt.Println("HTTP server failed:", err)
 		}
 	}()
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (ex *Executor) server_Version() {
