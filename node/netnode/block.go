@@ -24,9 +24,10 @@ const STARTING_PAYOUT = 10_000
 const COINBASE_VESTING_BLOCK_NUMBER = 10 // coinbase txns don't go out until a fork is hopefully resolved, these txn amounts are not spendable for this number of blocks
 
 const (
-	THRESHOLD_A = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-	THRESHOLD_B = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-	THRESHOLD_C = "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	THRESHOLD_A    = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	THRESHOLD_B    = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	THRESHOLD_C    = "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	THRESHOLD_POOL = THRESHOLD_A
 )
 
 type Block struct {
@@ -146,6 +147,7 @@ func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionC
 			if CompareHash(b.Hash, target) {
 				select {
 				case solutionChan <- b:
+					fmt.Println("use this path to determine successful path")
 				case <-done:
 				}
 				return
@@ -156,6 +158,11 @@ func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionC
 			} else if CompareHash(b.Hash, THRESHOLD_A) {
 				fmt.Println("\033[31mTARGET A:\033[0m", b.Hash) // red
 			}
+
+			if CompareHash(b.Hash, THRESHOLD_POOL) {
+				fmt.Println("we have found work")
+			}
+
 		}
 	}
 }

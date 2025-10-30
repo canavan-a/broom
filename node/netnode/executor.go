@@ -51,6 +51,10 @@ type Executor struct {
 	EgressTxnChan   chan Transaction
 
 	Port string
+
+	MiningPoolEnabled bool
+
+	PoolTaxPercent int64 // ex: 8 = %8
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string, version string) *Executor {
@@ -100,6 +104,11 @@ func (ex *Executor) SetPort(port string) {
 	}
 
 	ex.Port = port
+}
+
+func (ex *Executor) EnableMiningPool(taxPercent int64) {
+	ex.PoolTaxPercent = taxPercent
+	ex.MiningPoolEnabled = true
 }
 
 func (ex *Executor) Start(workers int, self string, seeds ...string) {
@@ -525,6 +534,12 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_Backup()
 	ex.server_Version()
 
+	if ex.MiningPoolEnabled {
+		ex.server_Proof()
+		ex.server_PoolEnabled()
+		ex.server_PoolBlock()
+	}
+
 	handler := corsMiddleware(ex.mux)
 
 	go func() {
@@ -572,6 +587,39 @@ func (ex *Executor) server_Difficulty() {
 	thresh := ex.Database.Ledger.GetCurrentMiningThreshold()
 	ex.mux.Handle("/difficulty", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(thresh))
+	}))
+}
+
+func (ex *Executor) server_PoolEnabled() {
+	ex.mux.Handle("/pool", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(fmt.Sprintf("Mining pool is enabled, the tax rate is %%d per won block", ex.PoolTaxPercent)))
+	}))
+}
+
+func (ex *Executor) server_Proof() {
+	ex.mux.Handle("/proof", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Write([]byte("publish pool proofs to this endpoint"))
+			return
+		}
+
+		w.Write([]byte("hello"))
+	}))
+}
+
+func (ex *Executor) server_ProofTarget() {
+	ex.mux.Handle("/proof_target", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		w.Write([]byte(THRESHOLD_POOL))
+	}))
+}
+
+func (ex *Executor) server_PoolBlock() {
+	ex.mux.Handle("/pool_block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		// implement sending current mining block to the requester
+
+		w.Write([]byte("poolblock"))
 	}))
 }
 
