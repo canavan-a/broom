@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -129,113 +130,153 @@ func (cli *Cli) AreYouSure(operation string) bool {
 	return false
 }
 
-func (cli *Cli) Run() {
+type Command struct {
+	Description string
+	Run         func(cli *Cli, args []string)
+}
 
-	flag.Parse()
-	args := flag.Args()
+type CommandFlag struct {
+	Description string
+	Action      func(cli *Cli)
+}
 
-	if len(args) < 1 {
-		fmt.Println("expected subcommand")
-		fmt.Println("run: 'broom help' for valid sub commands")
-		return
+var (
+	commands      = map[string]*Command{}
+	flagsRegistry = map[string]*CommandFlag{}
+)
+var globalFlagValues = map[string]*bool{}
+
+func InitFlagsRegistry() {
+	flagsRegistry["help"] = &CommandFlag{
+		Description: "Display help information",
+		Action:      func(cli *Cli) { PrintHelp() },
 	}
+	flagsRegistry["version"] = &CommandFlag{
+		Description: "Display version information",
+		Action:      func(cli *Cli) { fmt.Println(Version) },
+	}
+}
 
-	switch args[0] {
-	case "config":
-		cli.DoConfig(args[1:])
-	case "update":
-		cli.AreYouSure("update")
-		cmd := exec.Command("bash", "-c", "curl -sSL https://broomledger.com/install.sh | sudo bash")
-		out, err := cmd.CombinedOutput()
-		fmt.Println(string(out))
-		if err != nil {
-			panic(err)
-		}
-	case "version":
-		fmt.Println(Version)
-	case "start":
-		if !cli.ValidateFlags() {
-			return
-		}
-		cli.initExecutor()
-		if len(args) >= 3 {
-			if args[1] == "workers" {
-				wrkrs, err := strconv.Atoi(args[2])
-				if err == nil && wrkrs != 0 {
-					fmt.Printf("Starting with %d workers.\n", wrkrs)
-					p := "80"
-					if cli.config.Port != "" {
-						p = cli.config.Port
+func InitCommandsRegistry() {
+	commands["help"] = &Command{
+		Description: "Show help for commands",
+		Run: func(cli *Cli, args []string) {
+			PrintHelp()
+		},
+	}
+	commands["version"] = &Command{
+		Description: "Show version",
+		Run: func(cli *Cli, args []string) {
+			fmt.Println(Version)
+		},
+	}
+	commands["config"] = &Command{
+		Description: "Configure broom (address|note|seeds|id|port|show)",
+		Run: func(cli *Cli, args []string) {
+			if len(args) == 0 {
+				fmt.Println("options: address, note, seeds, id, port, show")
+				return
+			}
+			cli.DoConfig(args)
+		},
+	}
+	commands["update"] = &Command{
+		Description: "Update broom to the latest release",
+		Run: func(cli *Cli, args []string) {
+			if !cli.AreYouSure("update") {
+				return
+			}
+			cmd := exec.Command("bash", "-c", "curl -sSL https://broomledger.com/install.sh | sudo bash")
+			out, err := cmd.CombinedOutput()
+			fmt.Println(string(out))
+			if err != nil {
+				panic(err)
+			}
+		},
+	}
+	commands["start"] = &Command{
+		Description: "Start the node (optionally: start workers <N>)",
+		Run: func(cli *Cli, args []string) {
+			if !cli.ValidateFlags() {
+				return
+			}
+			cli.initExecutor()
+			if len(args) >= 3 {
+				if args[1] == "workers" {
+					wrkrs, err := strconv.Atoi(args[2])
+					if err == nil && wrkrs != 0 {
+						fmt.Printf("Starting with %d workers.\n", wrkrs)
+						p := "80"
+						if cli.config.Port != "" {
+							p = cli.config.Port
+						}
+						fmt.Printf("starting server on port %s\n", p)
+						cli.ex.SetPort(p)
+						cli.ex.Start(wrkrs, cli.config.ID, cli.config.Seeds...)
 					}
-					fmt.Printf("starting server on port %s\n", p)
-					cli.ex.SetPort(p)
-					cli.ex.Start(wrkrs, cli.config.ID, cli.config.Seeds...)
+				} else {
+					fmt.Println("invalid workers flag")
 				}
 			} else {
-				fmt.Println("invalid workers flag")
+				fmt.Println("Starting node")
+				cli.ex.Start(netnode.EXECUTOR_WORKER_COUNT, cli.config.ID, cli.config.Seeds...)
 			}
-		} else {
-			fmt.Println("Starting node")
-			cli.ex.Start(netnode.EXECUTOR_WORKER_COUNT, cli.config.ID, cli.config.Seeds...)
-		}
-	case "backup":
-		cli.initExecutor()
-		fmt.Println("backing up")
-		if len(args) <= 2 {
-			fmt.Println("flags: run, peer, file")
-		}
-		switch args[1] {
-		case "run":
-			cli.ex.RunBackup()
-		case "peer":
-			if !cli.AreYouSure("backup from network peer") {
-				return
-			}
-			fmt.Println("backing up off peer")
-			fmt.Println("peer: ", args[2])
-			cli.ex.DownloadBackupFileFromPeer(args[2])
-			fmt.Println("unzipping backup file")
-			cli.ex.BackupFromFile("backup.tar.gz")
-		case "file":
-			if !cli.AreYouSure("backup from file") {
-				return
-			}
-			fmt.Println("backing up off file")
-			fmt.Println("file: ", args[2])
-			cli.ex.BackupFromFile(args[2])
-		}
-	case "help":
-		cmdHelp()
-	default:
-		fmt.Printf("Error: %v\n", args[0])
-		fmt.Println("Invalid command")
-		fmt.Println("Run 'broom help' for commands.")
+		},
 	}
-
+	commands["backup"] = &Command{
+		Description: "Backup operations (run|peer <addr>|file <path>)",
+		Run: func(cli *Cli, args []string) {
+			cli.initExecutor()
+			fmt.Println("backing up")
+			if len(args) == 0 {
+				fmt.Println("flags: run, peer, file")
+				return
+			}
+			switch args[0] {
+			case "run":
+				cli.ex.RunBackup()
+			case "peer":
+				if len(args) < 2 {
+					fmt.Println("usage: backup peer <peer-address>")
+					return
+				}
+				if !cli.AreYouSure("backup from network peer") {
+					return
+				}
+				fmt.Println("backing up off peer")
+				fmt.Println("peer: ", args[1])
+				cli.ex.DownloadBackupFileFromPeer(args[1])
+				fmt.Println("unzipping backup file")
+				cli.ex.BackupFromFile("backup.tar.gz")
+			case "file":
+				if len(args) < 2 {
+					fmt.Println("usage: backup file <backup-path>")
+					return
+				}
+				if !cli.AreYouSure("backup from file") {
+					return
+				}
+				fmt.Println("backing up off file")
+				fmt.Println("file: ", args[1])
+				cli.ex.BackupFromFile(args[1])
+			default:
+				fmt.Println("flags: run, peer, file")
+			}
+		},
+	}
 }
 
-func cmdHelp() {
-	fmt.Println("Configuration Commands run 'broom config':\n",
-		"\taddress\n",
-		"\tnote\n",
-		"\tseeds\n",
-		"\tid\n",
-		"\tport\n",
-		"\tshow\n",
-		"\n\n",
-		"Starting workers run 'broom start':\n",
-		"\tadd a number for how many workers you want.\n",
-		"\te.g. 'workers 2'\n",
-		"\n\n",
-		"Backing Up run 'broom backup':\n",
-		"\trun\n",
-		"\tpeer\n",
-		"\tfile\n",
-		"\tCheck node version: \n",
-		"\tversion")
+func RegisterFlags(fs *flag.FlagSet, cli *Cli) {
+	for name, cf := range flagsRegistry {
+		b := fs.Bool(name, false, cf.Description)
+		globalFlagValues[name] = b
+	}
 }
-
 func (cli *Cli) DoConfig(s []string) {
+	if len(s) == 0 {
+		fmt.Println("options: address, note, seeds, id, port, show")
+		return
+	}
 	switch s[0] {
 	case "address":
 		cli.EditConfig("", s[1], "", "")
@@ -258,7 +299,7 @@ func (cli *Cli) DoConfig(s []string) {
 		fmt.Println("Id: ", cli.config.ID)
 		fmt.Println("Port: ", cli.config.Port)
 	default:
-		fmt.Println("options: address, note, show")
+		fmt.Println("options: address, note, seeds, id, port, show")
 	}
 }
 
@@ -276,4 +317,82 @@ func (cli *Cli) ValidateFlags() bool {
 	}
 
 	return true
+}
+
+func PrintHelp() {
+	fmt.Println("==== Broom CLI Help ====")
+
+	fmt.Println("\nCommands:")
+	cmdNames := make([]string, 0, len(commands))
+	for n := range commands {
+		cmdNames = append(cmdNames, n)
+	}
+	sort.Strings(cmdNames)
+	for _, name := range cmdNames {
+		fmt.Printf("  %s\t%s\n", name, commands[name].Description)
+	}
+
+	fmt.Println("\nGlobal Flags:")
+	flagNames := make([]string, 0, len(flagsRegistry))
+	for n := range flagsRegistry {
+		flagNames = append(flagNames, n)
+	}
+	sort.Strings(flagNames)
+	for _, name := range flagNames {
+		fmt.Printf("  -%s\t%s\n", name, flagsRegistry[name].Description)
+	}
+
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  broom start")
+	fmt.Println("  broom start workers 4")
+	fmt.Println("  broom config show")
+	fmt.Println("  broom config address <ADDR>")
+	fmt.Println("  broom backup run")
+	fmt.Println("  broom backup peer 10.0.0.12:8080")
+	fmt.Println("  broom backup file ./backup.tar.gz")
+}
+
+func (cli *Cli) Run() {
+	fs := flag.NewFlagSet("broom", flag.ContinueOnError)
+	fs.SetOutput(os.Stdout)
+	InitFlagsRegistry()
+	InitCommandsRegistry()
+	RegisterFlags(fs, cli)
+
+	_ = fs.Parse(os.Args[1:])
+
+	if runGlobalFlagActions(cli) {
+		return
+	}
+
+	args := fs.Args()
+	if len(args) < 1 {
+		fmt.Println("expected subcommand")
+		fmt.Println("run: 'broom help' for valid subcommands")
+		return
+	}
+
+	cmdName := args[0]
+	cmd, ok := commands[cmdName]
+	if !ok {
+		fmt.Printf("Error: %v\n", cmdName)
+		fmt.Println("Invalid command")
+		fmt.Println("Run 'broom help' for commands.")
+		return
+	}
+
+	cmd.Run(cli, args[1:])
+}
+
+func runGlobalFlagActions(cli *Cli) (handled bool) {
+	for name, v := range globalFlagValues {
+		if v != nil && *v {
+			if def, ok := flagsRegistry[name]; ok && def.Action != nil {
+				def.Action(cli)
+				handled = true
+			}
+		}
+	}
+	return
 }
