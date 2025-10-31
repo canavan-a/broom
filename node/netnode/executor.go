@@ -52,9 +52,12 @@ type Executor struct {
 
 	Port string
 
+	// Mining Pool Config
 	MiningPoolEnabled bool
-
-	PoolTaxPercent int64 // ex: 8 = %8
+	PoolTaxPercent    int64 // ex: 8 = %8
+	PoolNote          string
+	PrivateKey        string
+	Pool              *MiningPool
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string, version string) *Executor {
@@ -106,9 +109,23 @@ func (ex *Executor) SetPort(port string) {
 	ex.Port = port
 }
 
-func (ex *Executor) EnableMiningPool(taxPercent int64) {
-	ex.PoolTaxPercent = taxPercent
+// call this from the cli
+func (ex *Executor) EnableMiningPool(tax int64, privateKey string, poolNote string) {
 	ex.MiningPoolEnabled = true
+	ex.PoolTaxPercent = tax
+	ex.PrivateKey = privateKey
+	ex.PoolNote = poolNote
+
+	ex.Pool = InitMiningPool(ex.PoolTaxPercent, STARTING_PAYOUT, ex.address, ex.TxnChan, ex.PoolNote, ex.PrivateKey, ex.GetNodeNonce)
+}
+
+func (ex *Executor) GetNodeNonce(address string) int64 {
+	found, nonce, _ := ex.Database.Ledger.CheckLedger(ex.address)
+	if !found {
+		panic("node nonce must exist, otherwise we can't pay out")
+	}
+	return nonce
+
 }
 
 func (ex *Executor) Start(workers int, self string, seeds ...string) {
@@ -538,6 +555,7 @@ func (ex *Executor) SetupHttpServer() {
 		ex.server_Proof()
 		ex.server_PoolEnabled()
 		ex.server_PoolBlock()
+		ex.server_ProofTarget()
 	}
 
 	handler := corsMiddleware(ex.mux)
@@ -584,15 +602,17 @@ func (ex *Executor) server_Root() {
 }
 
 func (ex *Executor) server_Difficulty() {
-	thresh := ex.Database.Ledger.GetCurrentMiningThreshold()
 	ex.mux.Handle("/difficulty", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		thresh := ex.Database.Ledger.GetCurrentMiningThreshold()
 		w.Write([]byte(thresh))
 	}))
 }
 
 func (ex *Executor) server_PoolEnabled() {
 	ex.mux.Handle("/pool", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(fmt.Sprintf("Mining pool is enabled, the tax rate is %d%% per won block", ex.PoolTaxPercent)))
+		var b []byte
+		b = fmt.Appendf(b, "Mining pool is enabled, the tax rate is %d%% per won block", ex.PoolTaxPercent)
+		w.Write(b)
 	}))
 }
 
@@ -616,8 +636,23 @@ func (ex *Executor) server_ProofTarget() {
 
 func (ex *Executor) server_PoolBlock() {
 	ex.mux.Handle("/pool_block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
+		// TODO
 		// implement sending current mining block to the requester
+		// validate the incoming block is at the Current Mining Height
+		// validate block,
+		//
+
+		// ex.Pool.AddWorkProof()
+		//
+		var workProof WorkProof
+		if err := json.NewDecoder(r.Body).Decode(&workProof); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		// ex.MiningBlock
+
+		ex.Pool.AddWorkProof(workProof.Address, workProof.Block)
 
 		w.Write([]byte("poolblock"))
 	}))
