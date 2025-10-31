@@ -592,7 +592,7 @@ func (ex *Executor) server_Difficulty() {
 
 func (ex *Executor) server_PoolEnabled() {
 	ex.mux.Handle("/pool", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(fmt.Sprintf("Mining pool is enabled, the tax rate is %%d per won block", ex.PoolTaxPercent)))
+		w.Write([]byte(fmt.Sprintf("Mining pool is enabled, the tax rate is %d%% per won block", ex.PoolTaxPercent)))
 	}))
 }
 

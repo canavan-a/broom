@@ -1,5 +1,13 @@
 package netnode
 
+import (
+	"encoding/gob"
+	"fmt"
+	"os"
+)
+
+const MINING_POOL_GOB = "mining_pool.gob"
+
 // stores proof groups for specific heights
 type MiningPool struct {
 	TaxPercent     int64
@@ -31,7 +39,7 @@ type WorkProof struct {
 	Block   Block  `json:"block"`
 }
 
-func NewMiningPool(
+func newMiningPool(
 	taxPercent int64,
 	blockPayout int64,
 	nodeMiningAddress string,
@@ -54,7 +62,58 @@ func NewMiningPool(
 		NodePrivateKey:  privateKey,
 		GetCurrentNonce: getNonce,
 	}
+}
 
+func InitMiningPool(
+	taxPercent int64,
+	blockPayout int64,
+	nodeMiningAddress string,
+	txnChan chan Transaction,
+	poolNote string,
+	privateKey string,
+	getNonce func(address string) int64,
+) *MiningPool {
+	mp := newMiningPool(taxPercent, blockPayout, nodeMiningAddress, txnChan, poolNote, privateKey, getNonce)
+
+	mp.LoadBackup() // pull in existing mining pool worklog (ignore error)
+	// if err != nil {
+	// 	fmt.Println("error loading backup")
+	// 	panic(err)
+	// }
+
+	err := mp.BackupWorkLog()
+	if err != nil {
+		fmt.Println("erroring here")
+		panic(err)
+	}
+
+	return mp
+}
+
+func (mp *MiningPool) BackupWorkLog() error {
+	file, err := os.Create(MINING_POOL_GOB)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	enc := gob.NewEncoder(file)
+	enc.Encode(mp.WorkLog)
+	return nil
+}
+
+func (mp *MiningPool) LoadBackup() error {
+	file, err := os.Open(MINING_POOL_GOB)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	var decodedMiningPool map[int64]WorkTrie
+	dec.Decode(&decodedMiningPool)
+	mp.WorkLog = decodedMiningPool
+
+	return nil
 }
 
 func CheckKeys(pub, priv string) {
@@ -100,10 +159,12 @@ func (mp *MiningPool) AddWorkProof(address string, block Block) {
 	trie.Members[address] = leaf
 	mp.WorkLog[block.Height] = trie
 
+	mp.BackupWorkLog()
 }
 
 func (mp *MiningPool) ClearBlock(i int64) {
 	delete(mp.WorkLog, i)
+	mp.BackupWorkLog()
 }
 
 func (mp *MiningPool) PayoutBlock(i int64) {

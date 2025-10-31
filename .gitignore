@@ -12,3 +12,5 @@ sample.json
 *.broom
 
 *.tar.gz
+
+*.gob
