@@ -329,7 +329,7 @@ func PrintHelp() {
 	}
 	sort.Strings(cmdNames)
 	for _, name := range cmdNames {
-		fmt.Printf("  %s\t%s\n", name, commands[name].Description)
+		fmt.Printf("  %s \t%s\n", name, commands[name].Description)
 	}
 
 	fmt.Println("\nGlobal Flags:")
@@ -339,7 +339,7 @@ func PrintHelp() {
 	}
 	sort.Strings(flagNames)
 	for _, name := range flagNames {
-		fmt.Printf("  -%s\t%s\n", name, flagsRegistry[name].Description)
+		fmt.Printf("  -%s \t%s\n", name, flagsRegistry[name].Description)
 	}
 
 	fmt.Println()
