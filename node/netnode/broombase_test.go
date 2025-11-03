@@ -144,7 +144,7 @@ func TestMinePoW(t *testing.T) {
 	myAddress := txn.From
 
 	block := NewBlock(myAddress, "test mining a block!", bb.Ledger.BlockHash, bb.Ledger.BlockHeight+1, int64(bb.Ledger.CalculateCurrentReward()))
-	block.Add(txn)
+	block._add(txn)
 
 	done := make(chan struct{})
 

@@ -28,7 +28,7 @@ func TestMiningPool(t *testing.T) {
 	mp := InitMiningPool(8, 10_000, "my address", txnChan, "test note", "my private key", getNonce)
 	fmt.Println(mp)
 
-	mp.AddWorkProof("hello hello hello", Block{Hash: "lsdkfjlkdafjs", Height: 8882})
+	mp._addWorkProof("hello hello hello", Block{Hash: "lsdkfjlkdafjs", Height: 8882})
 
 	err := mp.BackupWorkLog()
 	if err != nil {

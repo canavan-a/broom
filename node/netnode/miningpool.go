@@ -8,6 +8,9 @@ import (
 
 const MINING_POOL_GOB = "mining_pool.gob"
 
+// we want to resolve mining payout faster than our won blocks vest
+const MINING_PAYOUT_LOOKBACK = 15
+
 // stores proof groups for specific heights
 type MiningPool struct {
 	TaxPercent     int64
@@ -20,6 +23,8 @@ type MiningPool struct {
 	GetCurrentNonce func(address string) int64
 
 	PoolNote string
+
+	ListenerChan chan WorkProof
 }
 
 // stores proof groups per address
@@ -61,6 +66,7 @@ func newMiningPool(
 		PoolNote:        poolNote,
 		NodePrivateKey:  privateKey,
 		GetCurrentNonce: getNonce,
+		ListenerChan:    make(chan WorkProof, 10),
 	}
 }
 
@@ -87,7 +93,22 @@ func InitMiningPool(
 		panic(err)
 	}
 
+	mp.StartListener()
+
 	return mp
+}
+
+func (mp *MiningPool) StartListener() {
+	go func() {
+		for {
+			validWorkProof := <-mp.ListenerChan
+			mp._addWorkProof(validWorkProof.Address, validWorkProof.Block)
+		}
+	}()
+}
+
+func (mp *MiningPool) PublishWorkProof(wp WorkProof) {
+	mp.ListenerChan <- wp
 }
 
 func (mp *MiningPool) BackupWorkLog() error {
@@ -139,7 +160,7 @@ func CheckKeys(pub, priv string) {
 
 }
 
-func (mp *MiningPool) AddWorkProof(address string, block Block) {
+func (mp *MiningPool) _addWorkProof(address string, block Block) {
 	trie, ok := mp.WorkLog[block.Height]
 	if !ok {
 		trie = WorkTrie{Members: make(map[string]WorkLeaf)}

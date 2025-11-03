@@ -23,11 +23,11 @@ const MAX_BLOCK_SIZE = 1000
 const STARTING_PAYOUT = 10_000
 const COINBASE_VESTING_BLOCK_NUMBER = 10 // coinbase txns don't go out until a fork is hopefully resolved, these txn amounts are not spendable for this number of blocks
 
-const (
+const ( // these must be unique
 	THRESHOLD_A    = "0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 	THRESHOLD_B    = "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 	THRESHOLD_C    = "000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-	THRESHOLD_POOL = THRESHOLD_A
+	THRESHOLD_POOL = "1fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 )
 
 type Block struct {
@@ -120,7 +120,7 @@ func (b *Block) RandomizeNonce() {
 	b.Nonce = rand.Int63()
 }
 
-func (b *Block) Add(t Transaction) {
+func (b *Block) _add(t Transaction) {
 	b.Transactions[t.Sig] = t
 }
 
@@ -132,7 +132,7 @@ func (b *Block) RotateMiningValues() (hash string) {
 	return b.Hash
 }
 
-func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionChan chan Block, done chan struct{}) {
+func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionChan chan Block, done chan struct{}, solutionOperators map[string]func(b Block)) {
 	fmt.Println("worker started")
 	for {
 
@@ -151,16 +151,12 @@ func (b Block) StartSolutionWorker(ctx context.Context, target string, solutionC
 				case <-done:
 				}
 				return
-			} else if CompareHash(b.Hash, THRESHOLD_C) {
-				fmt.Println("\033[32mTARGET C:\033[0m", b.Hash) // green
-			} else if CompareHash(b.Hash, THRESHOLD_B) {
-				fmt.Println("\033[33mTARGET B:\033[0m", b.Hash) // yellow
-			} else if CompareHash(b.Hash, THRESHOLD_A) {
-				fmt.Println("\033[31mTARGET A:\033[0m", b.Hash) // red
 			}
 
-			if CompareHash(b.Hash, THRESHOLD_POOL) {
-				fmt.Println("we have found work")
+			for hash, operator := range solutionOperators {
+				if CompareHash(b.Hash, hash) {
+					operator(b)
+				}
 			}
 
 		}
@@ -186,12 +182,23 @@ func (b Block) DeepCopy() Block {
 	return b
 }
 
-func (b *Block) MineWithWorkers(ctx context.Context, target string, workers int, solutionChan chan Block, done chan struct{}) {
+func (b *Block) MineWithWorkers(ctx context.Context, target string, workers int, solutionChan chan Block, done chan struct{}, solutionOperators map[string]func(b Block)) {
 	fmt.Println("mining for target: ", target)
 	go func() {
 		for range workers {
 			bCopy := b.DeepCopy()
-			go bCopy.StartSolutionWorker(ctx, target, solutionChan, done)
+			go bCopy.StartSolutionWorker(ctx, target, solutionChan, done, solutionOperators)
 		}
 	}()
+}
+
+func (b *Block) _getCoinbaseTransaction() (t Transaction, found bool) {
+
+	for _, txn := range b.Transactions {
+		if txn.Coinbase {
+			return txn, true
+		}
+	}
+
+	return
 }

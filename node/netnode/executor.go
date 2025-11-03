@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -37,10 +38,11 @@ type Executor struct {
 
 	MsgChan chan []byte
 
-	BlockChan   chan Block
-	TxnChan     chan Transaction
-	Mempool     map[string]Transaction
-	MiningBlock *Block
+	BlockChan        chan Block
+	TxnChan          chan Transaction
+	Mempool          map[string]Transaction
+	MiningBlock      *Block
+	MiningBlockMutex *sync.RWMutex
 
 	address string
 	note    string
@@ -58,6 +60,8 @@ type Executor struct {
 	PoolNote          string
 	PrivateKey        string
 	Pool              *MiningPool
+
+	SolutionTargetOperators map[string]func(b Block)
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string, version string) *Executor {
@@ -72,6 +76,22 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 	msgChannel := make(chan []byte, CHANNEL_BUFFER_SIZE)
 
+	// set up solution targets
+
+	soultionTargets := make(map[string]func(b Block))
+
+	soultionTargets[THRESHOLD_A] = func(b Block) {
+		fmt.Println("\033[31mTARGET A:\033[0m", b.Hash)
+	}
+
+	soultionTargets[THRESHOLD_B] = func(b Block) {
+		fmt.Println("\033[32mTARGET B:\033[0m", b.Hash)
+	}
+
+	soultionTargets[THRESHOLD_C] = func(b Block) {
+		fmt.Println("\033[33mTARGET C:\033[0m", b.Hash)
+	}
+
 	ex := &Executor{
 		version: version,
 
@@ -80,16 +100,19 @@ func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir stri
 
 		MsgChan: msgChannel,
 
-		BlockChan:   blockChan,
-		TxnChan:     txnChan,
-		Mempool:     mempool,
-		MiningBlock: NewBlock(myAddress, miningNote, bb.Ledger.BlockHash, bb.Ledger.BlockHeight+1, int64(bb.Ledger.CalculateCurrentReward())),
+		BlockChan:        blockChan,
+		TxnChan:          txnChan,
+		Mempool:          mempool,
+		MiningBlock:      NewBlock(myAddress, miningNote, bb.Ledger.BlockHash, bb.Ledger.BlockHeight+1, int64(bb.Ledger.CalculateCurrentReward())),
+		MiningBlockMutex: new(sync.RWMutex),
 
 		address: myAddress,
 		note:    miningNote,
 
 		EgressBlockChan: egressBlockChan,
 		EgressTxnChan:   egressTxnChan,
+
+		SolutionTargetOperators: soultionTargets,
 	}
 
 	return ex
@@ -109,7 +132,7 @@ func (ex *Executor) SetPort(port string) {
 	ex.Port = port
 }
 
-// call this from the cli
+// call this from the cli before running the node
 func (ex *Executor) EnableMiningPool(tax int64, privateKey string, poolNote string) {
 	ex.MiningPoolEnabled = true
 	ex.PoolTaxPercent = tax
@@ -117,6 +140,10 @@ func (ex *Executor) EnableMiningPool(tax int64, privateKey string, poolNote stri
 	ex.PoolNote = poolNote
 
 	ex.Pool = InitMiningPool(ex.PoolTaxPercent, STARTING_PAYOUT, ex.address, ex.TxnChan, ex.PoolNote, ex.PrivateKey, ex.GetNodeNonce)
+
+	ex.SolutionTargetOperators[THRESHOLD_POOL] = func(b Block) {
+		ex.Pool.PublishWorkProof(WorkProof{Address: ex.address, Block: b})
+	}
 }
 
 func (ex *Executor) GetNodeNonce(address string) int64 {
@@ -125,6 +152,16 @@ func (ex *Executor) GetNodeNonce(address string) int64 {
 		panic("node nonce must exist, otherwise we can't pay out")
 	}
 	return nonce
+
+}
+
+func (ex *Executor) AtomicCopyMiningBlock() Block {
+
+	ex.MiningBlockMutex.RLock()
+	block := ex.MiningBlock.DeepCopy()
+	ex.MiningBlockMutex.RUnlock()
+
+	return block
 
 }
 
@@ -173,7 +210,7 @@ func (ex *Executor) Cancel() {
 	ex.controlChan <- struct{}{}
 }
 
-func (ex *Executor) ResetMiningBlock() {
+func (ex *Executor) _resetMiningBlock() {
 
 	// try to mine off highest block
 
@@ -407,7 +444,9 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 						// clear our mempool
 						ex.Mempool = make(map[string]Transaction)
 						// set out mining block height
+						ex.MiningBlockMutex.Lock()
 						ex.MiningBlock.Height = ex.Database.Ledger.BlockHeight + 1
+						ex.MiningBlockMutex.Unlock()
 
 					}
 
@@ -450,10 +489,16 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 					}
 					// if this skips and syncs forward we may have txns we try to put in that are already in the chain
 
-					ex.ResetMiningBlock()
-
+					ex.MiningBlockMutex.Lock()
+					ex._resetMiningBlock()
 					// copy remaining txns in the mempool into the new block
 					maps.Copy(ex.MiningBlock.Transactions, ex.Mempool)
+					ex.MiningBlockMutex.Unlock()
+
+					// pay out pool members n blocks ago
+					if ex.MiningPoolEnabled {
+						ex.PayoutMiners(block)
+					}
 				}
 
 			}
@@ -501,8 +546,10 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 						ex.EgressTxnChan <- txn
 
 						// we found a good txn, add it to the mempool
+						ex.MiningBlockMutex.Lock()
 						ex.Mempool[txn.Sig] = txn
-						ex.MiningBlock.Add(txn)
+						ex.MiningBlock._add(txn)
+						ex.MiningBlockMutex.Unlock()
 					}
 				} else {
 					fmt.Println("could not find balance and nonce")
@@ -519,9 +566,52 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 }
 
-func (ex *Executor) Mine(ctx context.Context, solutionChan chan Block, doneChan chan struct{}, workers int) {
+func (ex *Executor) PayoutMiners(block Block) {
+	// 1. trace chain to the desired block height off the correct hash
+	// 2. check if you're the block winner
+	// 3. trigger pool payout at desired height
+	target := block.Height - MINING_PAYOUT_LOOKBACK
 
-	ex.MiningBlock.MineWithWorkers(ctx, ex.Database.Ledger.MiningThresholdHash, workers, solutionChan, doneChan)
+	if target <= 0 {
+		// highly unlikely pooling starts on early blocks but good safety check
+		return
+	}
+
+	prev, found := ex.Database.GetBlock(block.PreviousBlockHash, block.Height-1)
+	if !found {
+		// highly improbable, this block was captured and stored
+		panic("no block found on search")
+	}
+
+	for {
+		prev, found = ex.Database.GetBlock(prev.PreviousBlockHash, prev.Height-1)
+		if !found {
+			panic("no block found on search")
+		}
+		if prev.Height == target {
+			break
+		}
+	}
+
+	txn, found := prev._getCoinbaseTransaction()
+	if !found {
+		// no coinbase txn, no block miner payout (highly unlikely)
+		return
+	}
+
+	if txn.To != ex.address {
+		// fairly common, block was not mined by this node
+		return
+	}
+
+	ex.Pool.PayoutBlock(prev.Height)
+
+}
+
+func (ex *Executor) Mine(ctx context.Context, solutionChan chan Block, doneChan chan struct{}, workers int) {
+	ex.MiningBlockMutex.RLock()
+	ex.MiningBlock.MineWithWorkers(ctx, ex.Database.Ledger.MiningThresholdHash, workers, solutionChan, doneChan, ex.SolutionTargetOperators)
+	ex.MiningBlockMutex.RUnlock()
 }
 
 func (ex *Executor) GetAddressTransactions(address string) []Transaction {
@@ -551,10 +641,12 @@ func (ex *Executor) SetupHttpServer() {
 	ex.server_Backup()
 	ex.server_Version()
 
+	// only exposed on mining pool enabled nodes
 	if ex.MiningPoolEnabled {
 		ex.server_Proof()
 		ex.server_PoolEnabled()
 		ex.server_PoolBlock()
+		ex.server_MiningBlock()
 		ex.server_ProofTarget()
 	}
 
@@ -634,16 +726,23 @@ func (ex *Executor) server_ProofTarget() {
 	}))
 }
 
+func (ex *Executor) server_MiningBlock() {
+	ex.mux.Handle("/mining_block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		block := ex.AtomicCopyMiningBlock()
+
+		data, err := json.Marshal(block)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		w.Write(data)
+	}))
+}
+
 func (ex *Executor) server_PoolBlock() {
 	ex.mux.Handle("/pool_block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// TODO
-		// implement sending current mining block to the requester
-		// validate the incoming block is at the Current Mining Height
-		// validate block,
-		//
 
-		// ex.Pool.AddWorkProof()
-		//
 		var workProof WorkProof
 		if err := json.NewDecoder(r.Body).Decode(&workProof); err != nil {
 			http.Error(w, err.Error(), 400)
@@ -651,11 +750,72 @@ func (ex *Executor) server_PoolBlock() {
 		}
 
 		// ex.MiningBlock
+		err := ex.ValidateIncomingPoolBlock(workProof.Block)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 
-		ex.Pool.AddWorkProof(workProof.Address, workProof.Block)
+		ex.Pool.PublishWorkProof(workProof)
 
-		w.Write([]byte("poolblock"))
+		w.Write([]byte("pool block valid"))
 	}))
+}
+
+func (ex *Executor) ValidateIncomingPoolBlock(block Block) error {
+	// ex.Database.Ledger.
+	miningBlock := ex.AtomicCopyMiningBlock()
+
+	// must prove that the miner is mining at the same level so it doesn't skip payouts
+	if block.Height != miningBlock.Height {
+		return errors.New("invalid block height")
+	}
+
+	if block.PreviousBlockHash != miningBlock.PreviousBlockHash {
+		return errors.New("invalid previous hash value")
+	}
+
+	count := 0
+	var coinbaseTxn Transaction
+	for _, txn := range block.Transactions {
+		if txn.Coinbase {
+			count++
+			coinbaseTxn = txn
+		} else {
+			valid, err := txn.ValidateSig()
+			if err != nil {
+				return errors.New("block contains invalid sig txn")
+			}
+			if !valid {
+				return errors.New("block contains invalid sig txn")
+			}
+
+		}
+		if count > 1 {
+			return errors.New("too many coinbase txns")
+		}
+	}
+
+	if count == 0 {
+		return errors.New("no coinbase txn included")
+	}
+
+	if coinbaseTxn.To != ex.address {
+		return errors.New("invalid coinbase txn address")
+	}
+
+	if coinbaseTxn.Amount != STARTING_PAYOUT {
+		return errors.New("invalid coinbase txn payout amount")
+	}
+
+	// finally check block hash
+
+	if !block.ValidateHash() {
+		return errors.New("invalid block hash")
+	}
+
+	return nil
+
 }
 
 type HashHeight struct {
