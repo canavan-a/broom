@@ -150,7 +150,7 @@ func TestMinePoW(t *testing.T) {
 
 	solution := make(chan Block)
 
-	block.MineWithWorkers(context.Background(), easyMiningTarget, 10, solution, done)
+	block.MineWithWorkers(context.Background(), easyMiningTarget, 10, solution, done, make(map[string]func(b Block)))
 
 	fmt.Println("block height: ", block.Height)
 

@@ -29,7 +29,7 @@ sudo wallet address
 Configure node with your mining address.
 
 ```bash
-sudo broom config address MFkwEwYH......
+sudo broom config address <broom address>
 ```
 
 Add a note.
@@ -41,7 +41,7 @@ sudo broom config note "hello world"
 Add seed or seeds.
 
 ```bash
-sudo broom config seeds node.broomldger.com example.notarealnode.com
+sudo broom config seeds <seed 1> <seed 2>
 ```
 
 ### Configure id
@@ -51,26 +51,21 @@ Note: Your node will need a publicly accessible hostname or IP. This will requir
 After setup, assign your ID.
 
 ```bash
-sudo broom config id hello.test.com
+sudo broom config id <node url or ip>
 ```
 
-or
-
-```bash
-sudo broom config id 22.45.7.263
-```
 
 ### Run the Node
 
 Each worker requires `500Mb` of ram so please assign workers appropriatly.
 
 ```bash
-sudo broom start workers 2
+sudo broom start workers <number of workers>
 ```
 
 ## Background
 
-Broom is the ledger and blockchain infrastructure that will support the Meridian token. The name comes from history: in Medieval England, tally sticks were used to record debts by carving marks into wood. A broom, being a bundle of sticks, represents strength and resilience through unity. In Broom, each node is like a stick, individually small but collectively forming a secure, reliable system. Even if one fails, the whole network remains effective.
+Broom is the ledger and blockchain infrastructure that will support the BR token. The name comes from history: in Medieval England, tally sticks were used to record debts by carving marks into wood. A broom, being a bundle of sticks, represents strength and resilience through unity. In Broom, each node is like a stick, individually small but collectively forming a secure, reliable system. Even if one fails, the whole network remains effective.
 
 ## Overview
 
@@ -78,11 +73,11 @@ The ledger is backed by Ed25519 Elliptic curve key signiatures for all cryptogra
 
 ## Coinage
 
-The block reward is 10,000 Broom Ledger Token (BLT). This is the basis token for the ledger. When transacting token, the values are in Meridian.
+The block reward is 10,000 Broom Ledger Token (BLT). This is the basis token for the ledger. When transacting token, the values are in BR.
 
-$$ 1 Meridian = 100,000 BLT $$
+$$ 1 BR = 100,000 BLT $$
 
-With the block target of 60 seconds, the result is `144` meridian mined every day.
+With the block target of 60 seconds, the result is `144` BR mined every day.
 
 ## Node messaging protocol
 
@@ -95,6 +90,8 @@ Nodes no longer communicate on a custom TCP protocol. They send messages back an
 The hash function used in mining as well as transaction signing is a Argon2d. This is a variant of Argon2 that is memory hardened. The goal is to resist against ASIC and GPU mining. Argon2d has a higher resistence to these attacks because it is data dependent. The library used was the `golang.org/x/crypto/argon2` implementation. This library does NOT expose Argon2d because it is actually vulnerable to side channel attacks. Thankfully this project is not hashing passwords so we can use it. This repo was copied and modified with source in the crypto module of this project.
 
 The settled on configuration for argon is: 512MB and 2 threads.
+
+Crypto wasm bindings are available through the official wasm library here: [wasm-crypto-sdk](https://github.com/broomledger/wasm-crypto-sdk)
 
 ### Wallet pub/piv keys
 
@@ -109,7 +106,7 @@ The transaction follows the following format, this gives the node enough informa
 ```golang
 type Transaction struct {
   Sig string `json:"sig"`
-  
+
   Coinbase bool   `json:"coinbase"`
   Note     string `json:"note"`
   Nonce    int64  `json:"nonce"`
@@ -143,13 +140,13 @@ The Broombase is a database containing a series of files with raw bytes that mar
 
 Each file in the Broombase is labelled in the following format:
 
-`{height}_{hash}.broom`
+`<height>_<hash>.broom`
 
 ## Ledger
 
 The ledger is an in memory balance summary for each account. This is settled by stacking each block from source, validating and calculating final balances and highest nonces. Snapshots of the ledger are saved. These are stored similarly to broombase. The ledger is stored in the file format:
 
-`{height}_{hash}.broomledger`
+`<height>_<hash>.broomledger`
 
 Ledger snapshots are needed to resolve forks. The node needs the ability to validate blocks on a whim. Usually block validation is for current blocks. In the case of a fork, block validation will have to happen on all levels, this way arbitrary blocks can be added. The only condition to this is, we MUST have the previous block. Logic will be added to reconcile missing blocks in the event of a large fork.
 
@@ -204,7 +201,7 @@ base comand: `broom`
 
 ### help
 
-`broom help`: lists out possible command options stated below.  
+`broom help`: lists out possible command options stated below.
 
 ### config
 

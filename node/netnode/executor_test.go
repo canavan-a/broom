@@ -62,7 +62,7 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 			doneChanLocal := make(chan struct{})
 
 			fmt.Println()
-			block.MineWithWorkers(context.Background(), DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal)
+			block.MineWithWorkers(context.Background(), DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal, make(map[string]func(b Block)))
 
 			solution := <-blockChanLocal
 			close(doneChanLocal)
@@ -78,7 +78,7 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 			solution.PreviousBlockHash = solution.Hash
 			solution.Height = solution.Height + 1
 
-			solution.MineWithWorkers(context.Background(), DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal)
+			solution.MineWithWorkers(context.Background(), DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal, make(map[string]func(b Block)))
 
 			solution2 := <-blockChanLocal
 			close(doneChanLocal)
@@ -91,7 +91,7 @@ func WaitForBlock(blockHeight int, ex *Executor) {
 			solution2.PreviousBlockHash = solution2.Hash
 			solution2.Height = solution2.Height + 1
 
-			solution2.MineWithWorkers(context.Background(), DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal)
+			solution2.MineWithWorkers(context.Background(), DEFAULT_MINING_THRESHOLD, 2, blockChanLocal, doneChanLocal, make(map[string]func(b Block)))
 
 			solution3 := <-blockChanLocal
 			close(doneChanLocal)
