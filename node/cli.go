@@ -187,7 +187,7 @@ func InitCommandsRegistry() {
 		},
 	}
 	commands["config"] = &Command{
-		Description: "Configure broom (address|note|seeds|id|port|show)",
+		Description: "Configure broom (address|note|seeds|id|port|private-key|pool-note|pool-tax|show)",
 		Run: func(cli *Cli, args []string) {
 			if len(args) == 0 {
 				fmt.Println("options: address, note, seeds, id, port, show")
@@ -211,7 +211,7 @@ func InitCommandsRegistry() {
 		},
 	}
 	commands["start"] = &Command{
-		Description: "Start the node (optionally: start workers <N>) specify pool flag to enable mining pools ",
+		Description: "Start the node (optionally: start workers <N>, or specify pool flag to enable mining pools) ",
 		Run: func(cli *Cli, args []string) {
 			if !cli.ValidateFlags() {
 				return
