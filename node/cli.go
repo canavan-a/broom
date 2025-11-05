@@ -8,9 +8,11 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/canavan-a/broom/node/netnode"
 )
@@ -28,6 +30,10 @@ type Config struct {
 	Seeds   []string `json:"seeds"`
 	ID      string   `json:"id"` //  this is your public url
 	Port    string   `json:"port"`
+
+	PoolTax    int64  `json:"poolTax"`
+	PrivateKey string `json:"privateKey"`
+	PoolNote   string `json:"poolNote"`
 }
 
 func NewCli() *Cli {
@@ -77,7 +83,7 @@ func (cli *Cli) WriteConfig(cfg Config) error {
 	return nil
 }
 
-func (cli *Cli) EditConfig(note, address, id string, port string, seeds ...string) {
+func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote string, poolTax int64, seeds ...string) {
 
 	if id != "" {
 		cli.config.ID = id
@@ -94,6 +100,16 @@ func (cli *Cli) EditConfig(note, address, id string, port string, seeds ...strin
 	if port != "" {
 		cli.config.Port = port
 	}
+
+	if privateKey == "" {
+		cli.config.PrivateKey = privateKey
+	}
+
+	if poolNote == "" {
+		cli.config.PoolNote = poolNote
+	}
+
+	cli.config.PoolTax = poolTax
 
 	cli.config.Seeds = append(cli.config.Seeds, seeds...)
 
@@ -195,32 +211,39 @@ func InitCommandsRegistry() {
 		},
 	}
 	commands["start"] = &Command{
-		Description: "Start the node (optionally: start workers <N>)",
+		Description: "Start the node (optionally: start workers <N>) specify pool flag to enable mining pools ",
 		Run: func(cli *Cli, args []string) {
 			if !cli.ValidateFlags() {
 				return
 			}
 			cli.initExecutor()
-			if len(args) >= 3 {
-				if args[1] == "workers" {
-					wrkrs, err := strconv.Atoi(args[2])
-					if err == nil && wrkrs != 0 {
-						fmt.Printf("Starting with %d workers.\n", wrkrs)
-						p := "80"
-						if cli.config.Port != "" {
-							p = cli.config.Port
-						}
-						fmt.Printf("starting server on port %s\n", p)
-						cli.ex.SetPort(p)
-						cli.ex.Start(wrkrs, cli.config.ID, cli.config.Seeds...)
-					}
-				} else {
-					fmt.Println("invalid workers flag")
+
+			workers := netnode.EXECUTOR_WORKER_COUNT
+			found, workerString := ParseSubFlag("workers", args, true)
+			if found {
+				i, err := strconv.Atoi(workerString)
+				if err != nil {
+					fmt.Println("invalid workers value")
+					return
 				}
-			} else {
-				fmt.Println("Starting node")
-				cli.ex.Start(netnode.EXECUTOR_WORKER_COUNT, cli.config.ID, cli.config.Seeds...)
+				workers = i
 			}
+
+			poolEnabled, _ := ParseSubFlag("pool", args, false)
+			if poolEnabled {
+				if cli.config.PrivateKey == "" {
+					fmt.Println("no private key configured")
+				}
+				if cli.ex.PoolTaxPercent == 0 {
+					fmt.Println("WARNING: No pool tax enabled, pool mining will be fair")
+					time.Sleep(time.Second)
+				}
+				cli.ex.EnableMiningPool(cli.config.PoolTax, cli.config.PrivateKey, cli.config.PoolNote)
+			}
+
+			fmt.Println("Starting node")
+			cli.ex.Start(workers, cli.config.ID, cli.config.Seeds...)
+
 		},
 	}
 	commands["backup"] = &Command{
@@ -266,6 +289,23 @@ func InitCommandsRegistry() {
 	}
 }
 
+func ParseSubFlag(flagName string, args []string, parseSuccessor bool) (found bool, successorValue string) {
+	idx := slices.Index(args, flagName)
+	if idx == -1 {
+		return
+	}
+	if !parseSuccessor {
+		return true, ""
+	}
+
+	if idx == len(args)-1 {
+		return
+	}
+
+	return true, args[idx+1]
+
+}
+
 func RegisterFlags(fs *flag.FlagSet, cli *Cli) {
 	for name, cf := range flagsRegistry {
 		b := fs.Bool(name, false, cf.Description)
@@ -279,27 +319,52 @@ func (cli *Cli) DoConfig(s []string) {
 	}
 	switch s[0] {
 	case "address":
-		cli.EditConfig("", s[1], "", "")
+		cli.EditConfig("", s[1], "", "", "", "", 0)
 	case "note":
-		cli.EditConfig(s[1], "", "", "")
+		cli.EditConfig(s[1], "", "", "", "", "", 0)
 	case "seeds":
 		if s[1] == "clear" {
 			cli.ClearSeeds()
 		} else {
-			cli.EditConfig("", "", "", "", s[1:]...)
+			cli.EditConfig("", "", "", "", "", "", 0, s[1:]...)
 		}
 	case "id":
-		cli.EditConfig("", "", s[1], "")
+		cli.EditConfig("", "", s[1], "", "", "", 0)
 	case "port":
-		cli.EditConfig("", "", "", s[1])
+		cli.EditConfig("", "", "", s[1], "", "", 0)
+	case "private-key":
+		cli.EditConfig("", "", "", "", s[1], "", 0)
+	case "pool-note":
+		cli.EditConfig("", "", "", "", "", s[1], 0)
+	case "pool-tax":
+		val, err := strconv.Atoi(s[1])
+		if err != nil {
+			fmt.Println("invalid number")
+			return
+		}
+		if val > 100 {
+			fmt.Println("tax rate is too high")
+			return
+		}
+		if val < 0 {
+			fmt.Println("tax rate is too low")
+			return
+		}
+		cli.EditConfig("", "", "", "", "", "", int64(val))
 	case "show":
 		fmt.Println("Address: ", cli.config.Address)
 		fmt.Println("Note: ", cli.config.Note)
 		fmt.Println("Seeds: ", cli.config.Seeds)
 		fmt.Println("Id: ", cli.config.ID)
 		fmt.Println("Port: ", cli.config.Port)
+		fmt.Println("--- Pool config ---")
+		fmt.Println("pool-note: ", cli.config.PoolNote)
+		pk := cli.config.PrivateKey
+		fmt.Println("private-key: ", pk[:20], ".....", pk[len(pk)-20:])
+		fmt.Println("pool-tax: ", cli.config.PoolTax, "%")
+
 	default:
-		fmt.Println("options: address, note, seeds, id, port, show")
+		fmt.Println("options: address, note, seeds, id, port, private-key, pool-note, pool-tax, show")
 	}
 }
 
