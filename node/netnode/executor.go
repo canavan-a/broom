@@ -643,9 +643,8 @@ func (ex *Executor) SetupHttpServer() {
 
 	// only exposed on mining pool enabled nodes
 	if ex.MiningPoolEnabled {
-		ex.server_Proof()
 		ex.server_PoolEnabled()
-		ex.server_PoolBlock()
+		ex.server_Proof()
 		ex.server_MiningBlock()
 		ex.server_ProofTarget()
 	}
@@ -708,17 +707,6 @@ func (ex *Executor) server_PoolEnabled() {
 	}))
 }
 
-func (ex *Executor) server_Proof() {
-	ex.mux.Handle("/proof", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			w.Write([]byte("publish pool proofs to this endpoint"))
-			return
-		}
-
-		w.Write([]byte("hello"))
-	}))
-}
-
 func (ex *Executor) server_ProofTarget() {
 	ex.mux.Handle("/proof_target", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -740,8 +728,12 @@ func (ex *Executor) server_MiningBlock() {
 	}))
 }
 
-func (ex *Executor) server_PoolBlock() {
-	ex.mux.Handle("/pool_block", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (ex *Executor) server_Proof() {
+	ex.mux.Handle("/proof", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Write([]byte("publish pool proofs to this endpoint"))
+			return
+		}
 
 		var workProof WorkProof
 		if err := json.NewDecoder(r.Body).Decode(&workProof); err != nil {
@@ -758,7 +750,7 @@ func (ex *Executor) server_PoolBlock() {
 
 		ex.Pool.PublishWorkProof(workProof)
 
-		w.Write([]byte("pool block valid"))
+		w.Write([]byte("proof valid"))
 	}))
 }
 

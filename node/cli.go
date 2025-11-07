@@ -34,6 +34,8 @@ type Config struct {
 	PoolTax    int64  `json:"poolTax"`
 	PrivateKey string `json:"privateKey"`
 	PoolNote   string `json:"poolNote"`
+
+	Pool string `json:"pool"`
 }
 
 func NewCli() *Cli {
@@ -83,7 +85,7 @@ func (cli *Cli) WriteConfig(cfg Config) error {
 	return nil
 }
 
-func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote string, poolTax int64, seeds ...string) {
+func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote, pool string, poolTax int64, seeds ...string) {
 
 	if id != "" {
 		cli.config.ID = id
@@ -107,6 +109,10 @@ func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote string,
 
 	if poolNote == "" {
 		cli.config.PoolNote = poolNote
+	}
+
+	if pool == "" {
+		cli.config.Pool = pool
 	}
 
 	cli.config.PoolTax = poolTax
@@ -287,6 +293,37 @@ func InitCommandsRegistry() {
 			}
 		},
 	}
+	commands["mine"] = &Command{
+		Description: "Mine without running a full node yourself. Config needed: address and pool",
+		Run: func(cli *Cli, args []string) {
+
+			if cli.config.Pool == "" {
+				fmt.Println("Pool is not configured, please run: broom config pool <pool address or ip>")
+				return
+			}
+
+			workers := 1
+			found, workersString := ParseSubFlag("workers", args, true)
+			if found {
+				workers, _ = strconv.Atoi(workersString)
+				if workers == 0 {
+					fmt.Println("invalid worker cound")
+					return
+				}
+			}
+
+			if cli.config.Address == "" {
+				fmt.Println("please configure your address; broom config address <address>")
+				return
+			}
+
+			miner := NewMiner(cli.config.Address, cli.config.Pool, workers)
+			fmt.Println("connected to pool operator: ", cli.config.Pool)
+
+			miner.Start()
+
+		},
+	}
 }
 
 func ParseSubFlag(flagName string, args []string, parseSuccessor bool) (found bool, successorValue string) {
@@ -319,23 +356,25 @@ func (cli *Cli) DoConfig(s []string) {
 	}
 	switch s[0] {
 	case "address":
-		cli.EditConfig("", s[1], "", "", "", "", 0)
+		cli.EditConfig("", s[1], "", "", "", "", "", 0)
 	case "note":
-		cli.EditConfig(s[1], "", "", "", "", "", 0)
+		cli.EditConfig(s[1], "", "", "", "", "", "", 0)
 	case "seeds":
 		if s[1] == "clear" {
 			cli.ClearSeeds()
 		} else {
-			cli.EditConfig("", "", "", "", "", "", 0, s[1:]...)
+			cli.EditConfig("", "", "", "", "", "", "", 0, s[1:]...)
 		}
 	case "id":
-		cli.EditConfig("", "", s[1], "", "", "", 0)
+		cli.EditConfig("", "", s[1], "", "", "", "", 0)
 	case "port":
-		cli.EditConfig("", "", "", s[1], "", "", 0)
+		cli.EditConfig("", "", "", s[1], "", "", "", 0)
 	case "private-key":
-		cli.EditConfig("", "", "", "", s[1], "", 0)
+		cli.EditConfig("", "", "", "", s[1], "", "", 0)
 	case "pool-note":
-		cli.EditConfig("", "", "", "", "", s[1], 0)
+		cli.EditConfig("", "", "", "", "", s[1], "", 0)
+	case "pool":
+		cli.EditConfig("", "", "", "", "", "", s[1], 0)
 	case "pool-tax":
 		val, err := strconv.Atoi(s[1])
 		if err != nil {
@@ -350,7 +389,7 @@ func (cli *Cli) DoConfig(s []string) {
 			fmt.Println("tax rate is too low")
 			return
 		}
-		cli.EditConfig("", "", "", "", "", "", int64(val))
+		cli.EditConfig("", "", "", "", "", "", "", int64(val))
 	case "show":
 		fmt.Println("Address: ", cli.config.Address)
 		fmt.Println("Note: ", cli.config.Note)
@@ -362,9 +401,10 @@ func (cli *Cli) DoConfig(s []string) {
 		pk := cli.config.PrivateKey
 		fmt.Println("private-key: ", pk[:20], ".....", pk[len(pk)-20:])
 		fmt.Println("pool-tax: ", cli.config.PoolTax, "%")
-
+		fmt.Println("--- Miner config ---")
+		fmt.Println("pool: ", cli.config.Pool)
 	default:
-		fmt.Println("options: address, note, seeds, id, port, private-key, pool-note, pool-tax, show")
+		fmt.Println("options: address, note, seeds, id, port, private-key, pool-note, pool-tax, pool, show")
 	}
 }
 
