@@ -203,12 +203,20 @@ func InitCommandsRegistry() {
 		},
 	}
 	commands["update"] = &Command{
-		Description: "Update broom to the latest release",
+		Description: "Update broom to the latest release, supply version flag to go to a specific version.",
 		Run: func(cli *Cli, args []string) {
 			if !cli.AreYouSure("update") {
 				return
 			}
-			cmd := exec.Command("bash", "-c", "curl -sSL https://broomledger.com/install.sh | sudo bash")
+
+			_, version := ParseSubFlag("version", args, true)
+			fullCommand := "curl -sSL https://broomledger.com/install.sh | sudo bash"
+
+			if version != "" {
+				fullCommand = fmt.Sprintf("%s -s -- %s", fullCommand, version)
+			}
+
+			cmd := exec.Command("bash", "-c", fullCommand)
 			out, err := cmd.CombinedOutput()
 			fmt.Println(string(out))
 			if err != nil {
