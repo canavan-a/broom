@@ -534,6 +534,14 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 					addressTxns := ex.GetAddressTransactions(txn.From)
 
 					addressTxns = append(addressTxns, txn)
+					fmt.Println("incoming nonce: ", txn.Nonce)
+
+					for _, a := range addressTxns {
+						fmt.Println("contained txn nonce: ", a.Nonce)
+					}
+
+					fmt.Println(addressTxns)
+
 					// toValidate := append(ex.miningBlock.Transactions... )
 					err := ValidateTransactionGroup(accountBalance, accountNonce, addressTxns)
 					if err != nil {
