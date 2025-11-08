@@ -170,7 +170,7 @@ func (m *Miner) RunMiningLoop() {
 			fmt.Println(sol)
 			RestartMineAction(m, func() {
 				fmt.Println("you found a solution, tell the pool operator")
-				_, err := RequestPool[netnode.Block, any](m, sol, Post, "block")
+				_, err := RequestPool[netnode.Block, string](m, sol, Post, "block")
 				if err != nil {
 					fmt.Println("solution could not publish")
 				}

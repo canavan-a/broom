@@ -533,30 +533,35 @@ func (ex *Executor) RunMiningLoop(ctx context.Context, workers int) {
 
 					addressTxns := ex.GetAddressTransactions(txn.From)
 
-					addressTxns = append(addressTxns, txn)
-					fmt.Println("incoming nonce: ", txn.Nonce)
-
-					for _, a := range addressTxns {
-						fmt.Println("contained txn nonce: ", a.Nonce)
+					var nonceAlreadyExist bool
+					for _, addrTxn := range addressTxns {
+						// check if txn nonce exits
+						if addrTxn.Nonce == txn.Nonce {
+							fmt.Println("txn nonce already exists skipping")
+							nonceAlreadyExist = true
+						}
 					}
 
-					fmt.Println(addressTxns)
+					if !nonceAlreadyExist {
+						addressTxns = append(addressTxns, txn)
+						fmt.Println("incoming nonce: ", txn.Nonce)
 
-					// toValidate := append(ex.miningBlock.Transactions... )
-					err := ValidateTransactionGroup(accountBalance, accountNonce, addressTxns)
-					if err != nil {
-						// pass: do nothing, txn is not validated
-						fmt.Println("could not validate txn: ", err)
-					} else {
-						fmt.Println("adding txn to block, mempool, and sending out")
-						// egress the txn
-						ex.EgressTxnChan <- txn
+						// toValidate := append(ex.miningBlock.Transactions... )
+						err := ValidateTransactionGroup(accountBalance, accountNonce, addressTxns)
+						if err != nil {
+							// pass: do nothing, txn is not validated
+							fmt.Println("could not validate txn: ", err)
+						} else {
+							fmt.Println("adding txn to block, mempool, and sending out")
+							// egress the txn
+							ex.EgressTxnChan <- txn
 
-						// we found a good txn, add it to the mempool
-						ex.MiningBlockMutex.Lock()
-						ex.Mempool[txn.Sig] = txn
-						ex.MiningBlock._add(txn)
-						ex.MiningBlockMutex.Unlock()
+							// we found a good txn, add it to the mempool
+							ex.MiningBlockMutex.Lock()
+							ex.Mempool[txn.Sig] = txn
+							ex.MiningBlock._add(txn)
+							ex.MiningBlockMutex.Unlock()
+						}
 					}
 				} else {
 					fmt.Println("could not find balance and nonce")
