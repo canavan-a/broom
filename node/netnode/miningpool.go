@@ -9,7 +9,7 @@ import (
 const MINING_POOL_GOB = "mining_pool.gob"
 
 // we want to resolve mining payout faster than our won blocks vest
-const MINING_PAYOUT_LOOKBACK = 15
+const MINING_PAYOUT_LOOKBACK = 3
 
 // stores proof groups for specific heights
 type MiningPool struct {
@@ -189,6 +189,7 @@ func (mp *MiningPool) ClearBlock(i int64) {
 }
 
 func (mp *MiningPool) PayoutBlock(i int64) {
+	fmt.Println("paying out height: ", i)
 
 	defer mp.ClearBlock(i)
 
@@ -201,10 +202,13 @@ func (mp *MiningPool) PayoutBlock(i int64) {
 	}
 
 	if totalProofs == 0 {
+		fmt.Println("no proofs")
 		return
 	}
 
 	nonce := mp.GetCurrentNonce(mp.NodeAddress)
+
+	fmt.Println("Mining pool payout current nonce: ", nonce)
 
 	for address, member := range mp.WorkLog[i].Members {
 		if address == mp.NodeAddress {
@@ -212,7 +216,13 @@ func (mp *MiningPool) PayoutBlock(i int64) {
 			continue
 		}
 		claim := member.Count * pot / totalProofs
+		fmt.Println("total mem proofs: ", member.Count)
+		fmt.Println("total proofs: ", totalProofs)
+		fmt.Println("payout address: ", address)
+		fmt.Println("payout claim: ", claim)
+		fmt.Println("pot total: ", pot)
 		nonce++
+
 		mp.Send(claim, address, nonce)
 	}
 

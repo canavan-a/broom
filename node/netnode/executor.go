@@ -594,11 +594,13 @@ func (ex *Executor) PayoutMiners(block Block) {
 
 	txn, found := prev._getCoinbaseTransaction()
 	if !found {
+		fmt.Println("NO Coinbase txn found")
 		// no coinbase txn, no block miner payout (highly unlikely)
 		return
 	}
 
 	if txn.To != ex.address {
+		fmt.Println("payout block was not mined by this node")
 		// fairly common, block was not mined by this node
 		return
 	}
