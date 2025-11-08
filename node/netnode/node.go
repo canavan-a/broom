@@ -189,7 +189,6 @@ func (n *Node) StartListenIncomingMessages() {
 		for {
 			msg := <-n.msgChannel
 			n.processIncomingMessage(msg)
-			fmt.Println("msg received")
 		}
 	}()
 }
@@ -309,7 +308,6 @@ func (n *Node) processIncomingMessage(rawMsg []byte) {
 		fmt.Println("txnmsg")
 	case BlockMsg:
 		n.ingressBlock <- msg.Block
-		fmt.Println("blkmsg")
 	}
 
 }
@@ -534,8 +532,6 @@ func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
 		return "", 0, errors.New(NO_PEERS_ERROR)
 	}
 
-	fmt.Println("peer sample", sample)
-
 	wg := sync.WaitGroup{}
 	mut := sync.Mutex{}
 
@@ -592,9 +588,7 @@ func (n *Node) SamplePeersHighestBlock() (hash string, height int, err error) {
 
 func (n *Node) GetAddressSample() []string {
 
-	fmt.Println("getting node lock")
 	n.mutex.Lock()
-	fmt.Println("node lock aquired")
 	// // sample for n peer's addresses
 	var allAddresses []string
 	for _, peer := range n.requestPeers {
@@ -602,13 +596,9 @@ func (n *Node) GetAddressSample() []string {
 	}
 	n.mutex.Unlock()
 
-	fmt.Println("grabbed addresses")
-
 	rand.Shuffle(len(allAddresses), func(i, j int) {
 		allAddresses[i], allAddresses[j] = allAddresses[j], allAddresses[i]
 	})
-
-	fmt.Println("shuffled addresses")
 
 	var sample []string
 	if len(allAddresses) >= PEER_SAMPLE_SIZE {
@@ -616,8 +606,6 @@ func (n *Node) GetAddressSample() []string {
 	} else {
 		sample = allAddresses
 	}
-
-	fmt.Println("sample created")
 
 	return sample
 }

@@ -290,7 +290,6 @@ func (ex *Executor) RunNetworkSync(ctx context.Context) (caughtUp bool) {
 
 	if height == int64(peerHeight) {
 		// we are synced to the chain
-		fmt.Println("peer heights match ")
 		return true
 	} else if height >= int64(peerHeight) {
 		fmt.Println("ahead of peers ")

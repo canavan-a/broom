@@ -249,7 +249,7 @@ func InitCommandsRegistry() {
 				if cli.config.PrivateKey == "" {
 					fmt.Println("no private key configured")
 				}
-				if cli.ex.PoolTaxPercent == 0 {
+				if cli.config.PoolTax == 0 {
 					fmt.Println("WARNING: No pool tax enabled, pool mining will be fair")
 					time.Sleep(time.Second)
 				}
@@ -410,8 +410,9 @@ func (cli *Cli) DoConfig(s []string) {
 		pk := cli.config.PrivateKey
 		if len(pk) > 30 {
 			fmt.Println("private-key: ", pk[:20], ".....", pk[len(pk)-20:])
+		} else {
+			fmt.Println("private-key: ", pk)
 		}
-		fmt.Println("private-key: ", pk)
 		fmt.Println("pool-tax: ", cli.config.PoolTax, "%")
 		fmt.Println("--- Miner config ---")
 		fmt.Println("pool: ", cli.config.Pool)

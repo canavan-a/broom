@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/canavan-a/broom/node/netnode"
@@ -35,6 +36,9 @@ type Miner struct {
 	proofTarget string
 
 	miningBlock netnode.Block
+
+	LocalProofs int
+	ProofsMutex sync.Mutex
 }
 
 func NewMiner(myPayoutAddress string, poolAddress string, workers int) *Miner {
@@ -56,6 +60,8 @@ func NewMiner(myPayoutAddress string, poolAddress string, workers int) *Miner {
 		signal:   make(chan struct{}),
 
 		miningBlock: netnode.Block{},
+
+		ProofsMutex: sync.Mutex{},
 	}
 
 	// test the connection to the specified pool
@@ -103,33 +109,38 @@ func (m *Miner) GetPoolData() (changed bool) {
 	}
 
 	if m.proofTarget != proofTarget {
+		fmt.Println(m.proofTarget, proofTarget)
 		m.proofTarget = proofTarget
 		changed = true
 	}
 
 	if m.winTarget != solutionTarget {
+		fmt.Println(m.winTarget, solutionTarget)
 		m.winTarget = solutionTarget
 		changed = true
 	}
 
 	if m.miningBlock.Height != block.Height {
+		fmt.Println("height diff")
 		m.miningBlock = block
 		changed = true
 		return
 	}
 
 	if m.miningBlock.PreviousBlockHash != block.PreviousBlockHash {
+		fmt.Println("hash diff")
 		m.miningBlock = block
 		changed = true
 		return
 	}
 
 	if len(m.miningBlock.Transactions) != len(block.Transactions) {
+		fmt.Println("txn diff")
 		m.miningBlock = block
 		changed = true
 		return
 	}
-	return true
+	return false
 }
 
 func (m *Miner) PollPoolData() {
@@ -137,6 +148,9 @@ func (m *Miner) PollPoolData() {
 
 		if m.GetPoolData() {
 			m.signal <- struct{}{}
+			m.ProofsMutex.Lock()
+			m.LocalProofs = 0
+			m.ProofsMutex.Unlock()
 		}
 		time.Sleep(2 * time.Second)
 	}
@@ -144,6 +158,7 @@ func (m *Miner) PollPoolData() {
 }
 
 func (m *Miner) RunMiningLoop() {
+	RestartMineAction(m, func() {})
 	for {
 		select {
 		case <-m.signal:
@@ -152,6 +167,7 @@ func (m *Miner) RunMiningLoop() {
 				fmt.Println("mining block: ", m.miningBlock.Height)
 			})
 		case sol := <-m.solution:
+			fmt.Println(sol)
 			RestartMineAction(m, func() {
 				fmt.Println("you found a solution, tell the pool operator")
 				_, err := RequestPool[netnode.Block, any](m, sol, Post, "block")
@@ -175,18 +191,26 @@ func (m *Miner) Mine() {
 
 	targetOperators := make(map[string]func(b netnode.Block))
 	targetOperators[m.proofTarget] = m.ReportProof
-
-	m.miningBlock.MineWithWorkers(context.Background(), m.proofTarget, m.Workers, m.solution, m.done, targetOperators)
+	fmt.Println("Mining started")
+	m.miningBlock.MineWithWorkers(context.Background(), m.winTarget, m.Workers, m.solution, m.done, targetOperators)
 }
 
 func (m *Miner) ReportProof(b netnode.Block) {
 	go func() {
-		fmt.Println("reporting proof")
 		workProof := netnode.WorkProof{Address: m.MyPayoutAddress, Block: b}
-		_, err := RequestPool[netnode.WorkProof, any](m, workProof, Post, "proof")
+		_, err := RequestPool[netnode.WorkProof, string](m, workProof, Post, "proof")
 		if err != nil {
+			fmt.Println(err)
 			fmt.Println("proof could not publish")
+			return
 		}
+		m.ProofsMutex.Lock()
+		m.LocalProofs += 1
+
+		fmt.Printf("\rcurrent block proofs: %v", m.LocalProofs)
+
+		m.ProofsMutex.Unlock()
+
 	}()
 }
 
@@ -238,6 +262,8 @@ func RequestPool[T, U any](m *Miner, payload T, requestType RequestType, path st
 	default:
 		err = json.Unmarshal(resData, &response)
 		if err != nil {
+			fmt.Println("error unmarshalling")
+
 			return
 		}
 	}

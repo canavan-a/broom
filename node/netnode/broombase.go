@@ -366,8 +366,6 @@ func (bb *Broombase) StoreLedger(hash string, height int64) error {
 		return nil
 	}
 
-	fmt.Println("Storing ledger", height, hash)
-
 	bb.Ledger.Mut.Lock()
 	defer bb.Ledger.Mut.Unlock()
 
@@ -390,8 +388,6 @@ func (bb *Broombase) StoreGivenLedger(ledger *Ledger) error {
 
 	bb.Ledger.Mut.Lock()
 	defer bb.Ledger.Mut.Unlock()
-
-	fmt.Println("storage lock aquired")
 
 	data, err := json.Marshal(ledger)
 	if err != nil {
@@ -432,8 +428,6 @@ func (l *Ledger) ValidateBlock(block Block) error {
 
 	l.Mut.RLock()
 	defer l.Mut.RUnlock()
-
-	fmt.Println("lock aquired")
 
 	if block.CalculateHash() != block.Hash {
 		return errors.New("ValidateBlock: signed hash is incorrect for block")
