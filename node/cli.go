@@ -85,7 +85,7 @@ func (cli *Cli) WriteConfig(cfg Config) error {
 	return nil
 }
 
-func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote, pool string, poolTax int64, seeds ...string) {
+func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote, pool string, poolTax int64, addingTax bool, seeds ...string) {
 
 	if id != "" {
 		cli.config.ID = id
@@ -103,19 +103,20 @@ func (cli *Cli) EditConfig(note, address, id, port, privateKey, poolNote, pool s
 		cli.config.Port = port
 	}
 
-	if privateKey == "" {
+	if privateKey != "" {
 		cli.config.PrivateKey = privateKey
 	}
 
-	if poolNote == "" {
+	if poolNote != "" {
 		cli.config.PoolNote = poolNote
 	}
 
-	if pool == "" {
+	if pool != "" {
 		cli.config.Pool = pool
 	}
-
-	cli.config.PoolTax = poolTax
+	if addingTax {
+		cli.config.PoolTax = poolTax
+	}
 
 	cli.config.Seeds = append(cli.config.Seeds, seeds...)
 
@@ -364,25 +365,25 @@ func (cli *Cli) DoConfig(s []string) {
 	}
 	switch s[0] {
 	case "address":
-		cli.EditConfig("", s[1], "", "", "", "", "", 0)
+		cli.EditConfig("", s[1], "", "", "", "", "", 0, false)
 	case "note":
-		cli.EditConfig(s[1], "", "", "", "", "", "", 0)
+		cli.EditConfig(s[1], "", "", "", "", "", "", 0, false)
 	case "seeds":
 		if s[1] == "clear" {
 			cli.ClearSeeds()
 		} else {
-			cli.EditConfig("", "", "", "", "", "", "", 0, s[1:]...)
+			cli.EditConfig("", "", "", "", "", "", "", 0, false, s[1:]...)
 		}
 	case "id":
-		cli.EditConfig("", "", s[1], "", "", "", "", 0)
+		cli.EditConfig("", "", s[1], "", "", "", "", 0, false)
 	case "port":
-		cli.EditConfig("", "", "", s[1], "", "", "", 0)
+		cli.EditConfig("", "", "", s[1], "", "", "", 0, false)
 	case "private-key":
-		cli.EditConfig("", "", "", "", s[1], "", "", 0)
+		cli.EditConfig("", "", "", "", s[1], "", "", 0, false)
 	case "pool-note":
-		cli.EditConfig("", "", "", "", "", s[1], "", 0)
+		cli.EditConfig("", "", "", "", "", s[1], "", 0, false)
 	case "pool":
-		cli.EditConfig("", "", "", "", "", "", s[1], 0)
+		cli.EditConfig("", "", "", "", "", "", s[1], 0, false)
 	case "pool-tax":
 		val, err := strconv.Atoi(s[1])
 		if err != nil {
@@ -397,7 +398,7 @@ func (cli *Cli) DoConfig(s []string) {
 			fmt.Println("tax rate is too low")
 			return
 		}
-		cli.EditConfig("", "", "", "", "", "", "", int64(val))
+		cli.EditConfig("", "", "", "", "", "", "", int64(val), true)
 	case "show":
 		fmt.Println("Address: ", cli.config.Address)
 		fmt.Println("Note: ", cli.config.Note)
@@ -407,7 +408,10 @@ func (cli *Cli) DoConfig(s []string) {
 		fmt.Println("--- Pool config ---")
 		fmt.Println("pool-note: ", cli.config.PoolNote)
 		pk := cli.config.PrivateKey
-		fmt.Println("private-key: ", pk[:20], ".....", pk[len(pk)-20:])
+		if len(pk) > 30 {
+			fmt.Println("private-key: ", pk[:20], ".....", pk[len(pk)-20:])
+		}
+		fmt.Println("private-key: ", pk)
 		fmt.Println("pool-tax: ", cli.config.PoolTax, "%")
 		fmt.Println("--- Miner config ---")
 		fmt.Println("pool: ", cli.config.Pool)
