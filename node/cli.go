@@ -303,7 +303,7 @@ func InitCommandsRegistry() {
 		},
 	}
 	commands["mine"] = &Command{
-		Description: "Mine without running a full node yourself. Config needed: address and pool",
+		Description: "Mine without running a full node yourself. Config needed: address and pool. Specify workers and add slave flag to bypass proof reporting",
 		Run: func(cli *Cli, args []string) {
 
 			if cli.config.Pool == "" {
@@ -326,7 +326,9 @@ func InitCommandsRegistry() {
 				return
 			}
 
-			miner := NewMiner(cli.config.Address, cli.config.Pool, workers)
+			slave, _ := ParseSubFlag("slave", args, false)
+
+			miner := NewMiner(cli.config.Address, cli.config.Pool, workers, slave)
 			fmt.Println("connected to pool operator: ", cli.config.Pool)
 
 			miner.Start()

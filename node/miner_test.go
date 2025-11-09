@@ -8,7 +8,7 @@ import (
 )
 
 func TestMiner(t *testing.T) {
-	m := NewMiner("sldkjfklsjdklfjlk", "node.broomledger.com", 3)
+	m := NewMiner("sldkjfklsjdklfjlk", "node.broomledger.com", 3, false)
 
 	res, err := RequestPool[any, netnode.HashHeight](m, nil, Get, "highest_block")
 	if err != nil {

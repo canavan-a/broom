@@ -39,9 +39,11 @@ type Miner struct {
 
 	LocalProofs int
 	ProofsMutex sync.Mutex
+
+	SlaveMode bool
 }
 
-func NewMiner(myPayoutAddress string, poolAddress string, workers int) *Miner {
+func NewMiner(myPayoutAddress string, poolAddress string, workers int, slave bool) *Miner {
 
 	var protocol string
 	if net.ParseIP(poolAddress) == nil {
@@ -62,6 +64,7 @@ func NewMiner(myPayoutAddress string, poolAddress string, workers int) *Miner {
 		miningBlock: netnode.Block{},
 
 		ProofsMutex: sync.Mutex{},
+		SlaveMode:   slave,
 	}
 
 	// test the connection to the specified pool
@@ -190,7 +193,9 @@ func RestartMineAction(m *Miner, action func()) {
 func (m *Miner) Mine() {
 
 	targetOperators := make(map[string]func(b netnode.Block))
-	targetOperators[m.proofTarget] = m.ReportProof
+	if !m.SlaveMode { // slave mode does not report proofs
+		targetOperators[m.proofTarget] = m.ReportProof
+	}
 	fmt.Println("Mining started")
 	m.miningBlock.MineWithWorkers(context.Background(), m.winTarget, m.Workers, m.solution, m.done, targetOperators)
 }
