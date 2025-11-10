@@ -27,7 +27,7 @@ const BACKUP_DIR = "backup"
 
 const BACKUP_FREQUENCY = 2 * 60 * 60 // every 2 hours
 
-const PROOF_LIMITER_RATE = time.Millisecond * 300
+const PROOF_LIMITER_RATE = time.Second
 
 type Executor struct {
 	version string

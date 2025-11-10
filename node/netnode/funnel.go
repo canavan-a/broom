@@ -1,6 +1,9 @@
 package netnode
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type BottleNeckQueue[T any] struct {
 	head *QueueNode[T]
@@ -86,9 +89,10 @@ func (fun Funnel[T]) loop() {
 	for {
 		select {
 		case value := <-fun.Ingress:
+			fmt.Println("adding ingress value")
 			fun.bottleNeck.Add(value)
 		case <-ticker.C:
-
+			fmt.Println("ticking")
 			value, found := fun.bottleNeck.Pop()
 			if found {
 				fun.Egress <- value
