@@ -9,7 +9,7 @@ import (
 const MINING_POOL_GOB = "mining_pool.gob"
 
 // we want to resolve mining payout faster than our won blocks vest
-const MINING_PAYOUT_LOOKBACK = 3
+const MINING_PAYOUT_LOOKBACK = 10
 
 // stores proof groups for specific heights
 type MiningPool struct {

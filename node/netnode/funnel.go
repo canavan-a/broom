@@ -45,14 +45,18 @@ func (bn *BottleNeckQueue[T]) HasNext() bool {
 }
 
 func (bn *BottleNeckQueue[T]) Pop() (value T, found bool) {
-	if bn.tail.next == nil {
+	first := bn.tail.next
+	if first == nil {
 		return
 	}
 
-	next := bn.tail.next
-	bn.tail.next = next.next
+	value = first.value
+	bn.tail.next = first.next
+	if bn.tail.next == nil {
+		bn.head = bn.tail
+	}
 
-	return next.value, true
+	return value, true
 }
 
 func (bn *BottleNeckQueue[T]) Clear() {
