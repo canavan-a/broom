@@ -32,12 +32,12 @@ func NewBottleNeckQueue[T any]() *BottleNeckQueue[T] {
 }
 
 func (bn *BottleNeckQueue[T]) Add(value T) {
-	node := QueueNode[T]{
+	node := &QueueNode[T]{
 		value: value,
 	}
 
-	bn.head.next = &node
-	bn.head = &node
+	bn.head.next = node
+	bn.head = node
 }
 
 func (bn *BottleNeckQueue[T]) HasNext() bool {
