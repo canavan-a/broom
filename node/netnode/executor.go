@@ -27,6 +27,8 @@ const BACKUP_DIR = "backup"
 
 const BACKUP_FREQUENCY = 2 * 60 * 60 // every 2 hours
 
+const PROOF_LIMITER_RATE = time.Millisecond * 300
+
 type Executor struct {
 	version string
 
@@ -62,6 +64,8 @@ type Executor struct {
 	Pool              *MiningPool
 
 	SolutionTargetOperators map[string]func(b Block)
+
+	ProofLimiter *Limiter[WorkProof]
 }
 
 func NewExecutor(myAddress string, miningNote string, dir string, ledgerDir string, version string) *Executor {
@@ -140,6 +144,8 @@ func (ex *Executor) EnableMiningPool(tax int64, privateKey string, poolNote stri
 	ex.PoolNote = poolNote
 
 	ex.Pool = InitMiningPool(ex.PoolTaxPercent, STARTING_PAYOUT, ex.address, ex.TxnChan, ex.PoolNote, ex.PrivateKey, ex.GetNodeNonce)
+
+	ex.ProofLimiter = NewLimiter(PROOF_LIMITER_RATE, ex.Pool.PublishWorkProof, isProofBlockHashValid)
 
 	ex.SolutionTargetOperators[THRESHOLD_POOL] = func(b Block) {
 		ex.Pool.PublishWorkProof(WorkProof{Address: ex.address, Block: b})
@@ -756,19 +762,40 @@ func (ex *Executor) server_Proof() {
 		}
 
 		// ex.MiningBlock
-		err := ex.ValidateIncomingPoolBlock(workProof.Block)
+		err := ex.ValidateIncomingPoolBlockNoHash(workProof.Block)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
 		}
 
-		ex.Pool.PublishWorkProof(workProof)
+		ex.ProofLimiter.Publish(workProof)
 
 		w.Write([]byte("proof valid"))
 	}))
 }
 
 func (ex *Executor) ValidateIncomingPoolBlock(block Block) error {
+
+	err := ex.ValidateIncomingPoolBlock(block)
+	if err != nil {
+		return err
+	}
+
+	if !block.ValidateHash() {
+		return errors.New("invalid block hash")
+	}
+
+	return nil
+
+}
+
+func isProofBlockHashValid(proof WorkProof) bool {
+	fmt.Println("validating proof hash:     OwO")
+	return proof.Block.ValidateHash()
+
+}
+
+func (ex *Executor) ValidateIncomingPoolBlockNoHash(block Block) error {
 	// ex.Database.Ledger.
 	miningBlock := ex.AtomicCopyMiningBlock()
 
@@ -812,12 +839,6 @@ func (ex *Executor) ValidateIncomingPoolBlock(block Block) error {
 
 	if coinbaseTxn.Amount != STARTING_PAYOUT {
 		return errors.New("invalid coinbase txn payout amount")
-	}
-
-	// finally check block hash
-
-	if !block.ValidateHash() {
-		return errors.New("invalid block hash")
 	}
 
 	return nil
