@@ -72,7 +72,7 @@ func NewFunnel[T any](rate time.Duration) *Funnel[T] {
 
 	funnel := &Funnel[T]{
 		Ingress:  make(chan T, 10),
-		Egress:   make(chan T),
+		Egress:   make(chan T, 10),
 		FlowRate: rate,
 
 		bottleNeck: NewBottleNeckQueue[T](),
@@ -95,6 +95,7 @@ func (fun Funnel[T]) loop() {
 			fmt.Println("ticking")
 			value, found := fun.bottleNeck.Pop()
 			if found {
+				fmt.Println("sending to egress")
 				fun.Egress <- value
 			}
 		}

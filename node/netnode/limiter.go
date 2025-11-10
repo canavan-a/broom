@@ -1,6 +1,9 @@
 package netnode
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Limiter[T any] struct {
 	Fun       *Funnel[T]
@@ -29,8 +32,12 @@ func (li Limiter[T]) Publish(value T) {
 func (li Limiter[T]) listen() {
 	for {
 		value := <-li.Fun.Egress
+
 		if li.Validator(value) {
+			fmt.Println("good validator, publishing")
 			li.Publisher(value)
+		} else {
+			fmt.Println("bad validator")
 		}
 
 	}
