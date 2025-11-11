@@ -1,7 +1,6 @@
 package netnode
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -34,10 +33,7 @@ func (li Limiter[T]) listen() {
 		value := <-li.Fun.Egress
 
 		if li.Validator(value) {
-			fmt.Println("good validator, publishing")
 			li.Publisher(value)
-		} else {
-			fmt.Println("bad validator")
 		}
 
 	}
